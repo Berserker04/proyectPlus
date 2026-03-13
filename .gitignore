@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+src-tauri/target/
+src-tauri/gen/
+
+*.log
+*.sqlite
+*.sqlite3

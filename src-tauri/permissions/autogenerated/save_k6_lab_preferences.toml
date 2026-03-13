@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-k6-lab-preferences"
+description = "Enables the save_k6_lab_preferences command without any pre-configured scope."
+commands.allow = ["save_k6_lab_preferences"]
+
+[[permission]]
+identifier = "deny-save-k6-lab-preferences"
+description = "Denies the save_k6_lab_preferences command without any pre-configured scope."
+commands.deny = ["save_k6_lab_preferences"]

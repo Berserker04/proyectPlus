@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-register-manual-service"
+description = "Enables the register_manual_service command without any pre-configured scope."
+commands.allow = ["register_manual_service"]
+
+[[permission]]
+identifier = "deny-register-manual-service"
+description = "Denies the register_manual_service command without any pre-configured scope."
+commands.deny = ["register_manual_service"]

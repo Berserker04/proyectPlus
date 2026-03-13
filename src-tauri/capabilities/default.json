@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability local de la ventana main con acceso solo a los comandos explicitos del MVP.",
+  "local": true,
+  "windows": ["main"],
+  "permissions": ["desktop-main"]
+}

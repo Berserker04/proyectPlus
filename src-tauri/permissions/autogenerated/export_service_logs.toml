@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-service-logs"
+description = "Enables the export_service_logs command without any pre-configured scope."
+commands.allow = ["export_service_logs"]
+
+[[permission]]
+identifier = "deny-export-service-logs"
+description = "Denies the export_service_logs command without any pre-configured scope."
+commands.deny = ["export_service_logs"]

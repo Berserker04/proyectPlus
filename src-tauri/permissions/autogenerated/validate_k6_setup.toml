@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-validate-k6-setup"
+description = "Enables the validate_k6_setup command without any pre-configured scope."
+commands.allow = ["validate_k6_setup"]
+
+[[permission]]
+identifier = "deny-validate-k6-setup"
+description = "Denies the validate_k6_setup command without any pre-configured scope."
+commands.deny = ["validate_k6_setup"]

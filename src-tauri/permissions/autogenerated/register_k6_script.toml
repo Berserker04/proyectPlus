@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-register-k6-script"
+description = "Enables the register_k6_script command without any pre-configured scope."
+commands.allow = ["register_k6_script"]
+
+[[permission]]
+identifier = "deny-register-k6-script"
+description = "Denies the register_k6_script command without any pre-configured scope."
+commands.deny = ["register_k6_script"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-run-service"
+description = "Enables the run_service command without any pre-configured scope."
+commands.allow = ["run_service"]
+
+[[permission]]
+identifier = "deny-run-service"
+description = "Denies the run_service command without any pre-configured scope."
+commands.deny = ["run_service"]

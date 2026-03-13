@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-service-execution-history"
+description = "Enables the get_service_execution_history command without any pre-configured scope."
+commands.allow = ["get_service_execution_history"]
+
+[[permission]]
+identifier = "deny-get-service-execution-history"
+description = "Denies the get_service_execution_history command without any pre-configured scope."
+commands.deny = ["get_service_execution_history"]

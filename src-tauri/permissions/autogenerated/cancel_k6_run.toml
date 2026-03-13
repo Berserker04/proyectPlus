@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cancel-k6-run"
+description = "Enables the cancel_k6_run command without any pre-configured scope."
+commands.allow = ["cancel_k6_run"]
+
+[[permission]]
+identifier = "deny-cancel-k6-run"
+description = "Denies the cancel_k6_run command without any pre-configured scope."
+commands.deny = ["cancel_k6_run"]
