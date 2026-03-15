@@ -1,15 +1,14 @@
 // ---------------------------------------------------------------------------
 // storage/mod.rs — declara submódulos y reexporta la API pública.
-// lib.rs no necesita ningún cambio: `mod storage;` resuelve automáticamente
-// este archivo cuando existe el directorio storage/.
 // ---------------------------------------------------------------------------
 
 mod actions;
 mod db;
+mod events;
 mod metrics;
 mod runtime;
 
-// Re-exports — superficie pública idéntica a la de storage.rs anterior
+// Re-exports — superficie pública idéntica a la anterior
 pub use db::{
     create_microservice, create_project, delete_microservice, delete_project,
     get_app_settings, get_dashboard_snapshot, initialize_database, save_app_settings,
@@ -21,3 +20,5 @@ pub use runtime::{
     run_service, stop_service, RuntimeSupervisor, TelemetryCache,
 };
 pub use actions::{open_service_folder, open_service_terminal};
+// Eventos push
+pub use events::{start_background_ticker, RefreshConfig};

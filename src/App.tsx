@@ -35,6 +35,9 @@ import {
   updateMicroservice,
   updateProject,
   updateServiceOrder,
+  listenDashboardUpdates,
+  listenServiceLogLine,
+  type UnlistenFn,
 } from "@/lib/platform/desktop";
 
 // Components
@@ -129,9 +132,6 @@ export default function App() {
     return entries.filter((e) => e.message.toLowerCase().includes(q));
   }, [logSnapshot?.entries, deferredLogQuery]);
 
-  const hasStarting = snapshot.services.some((s) => s.status === "starting");
-  const refreshMs = Math.max(1, (hasStarting ? settings.realtimeRefreshSeconds : settings.dashboardRefreshSeconds)) * 1000;
-
   const activeProjectStats = useMemo(() => {
     let running = 0;
     let errors = 0;
@@ -165,14 +165,16 @@ export default function App() {
 
   useEffect(() => {
     if (!isDesktop) return;
-    let ignore = false;
-    const id = window.setInterval(() => {
-      void loadDashboardSnapshot()
-        .then((snap) => { if (!ignore) setSnapshot(snap); })
-        .catch(() => undefined);
-    }, refreshMs);
-    return () => { ignore = true; window.clearInterval(id); };
-  }, [isDesktop, refreshMs]);
+    let unlisten: UnlistenFn | undefined;
+    listenDashboardUpdates((snap) => {
+      setSnapshot(snap);
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [isDesktop]);
 
   useEffect(() => {
     if (snapshot.services.length === 0) { setFocusedServiceId(null); return; }
@@ -183,14 +185,35 @@ export default function App() {
 
   const isLogsView = view === "logs";
   useEffect(() => {
-    if (!focusedServiceId || !isLogsView) return;
-    let ignore = false;
-    void getServiceLogs(focusedServiceId).then((ls) => { if (!ignore) setLogSnapshot(ls); });
-    const id = window.setInterval(() => {
-      void getServiceLogs(focusedServiceId).then((ls) => { if (!ignore) setLogSnapshot(ls); });
-    }, Math.max(1, settings.realtimeRefreshSeconds) * 1000);
-    return () => { ignore = true; window.clearInterval(id); };
-  }, [focusedServiceId, isLogsView, settings.realtimeRefreshSeconds]);
+    if (!focusedServiceId || !isLogsView || !isDesktop) return;
+
+    // Carga inicial del historial de logs
+    void getServiceLogs(focusedServiceId).then((ls) => {
+      setLogSnapshot(ls);
+    });
+
+    // Escuchar nuevas líneas en tiempo real
+    let unlisten: UnlistenFn | undefined;
+    listenServiceLogLine((payload) => {
+      if (payload.serviceId === focusedServiceId) {
+        setLogSnapshot((prev) => {
+          if (!prev || prev.serviceId !== payload.serviceId) return prev;
+          // Mantener sincronía con el límite del backend (2000 entradas)
+          const newEntries = [...prev.entries, payload.entry];
+          return {
+            ...prev,
+            entries: newEntries.slice(-2000),
+          };
+        });
+      }
+    }).then((u) => {
+      unlisten = u;
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [focusedServiceId, isLogsView, isDesktop]);
 
   useEffect(() => {
     if (!isLogAutoscroll || !isLogsView || !logSnapshot) return;

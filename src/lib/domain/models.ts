@@ -114,3 +114,12 @@ export interface ServiceActionResponse {
 }
 
 export type RunServiceResponse = ServiceActionResponse;
+
+// ---------------------------------------------------------------------------
+// Event payloads
+// ---------------------------------------------------------------------------
+
+export interface ServiceLogLineEvent {
+  serviceId: string;
+  entry: ServiceLogEntry;
+}

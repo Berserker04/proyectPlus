@@ -6,7 +6,10 @@ import type {
   RunServiceResponse,
   ServiceActionResponse,
   ServiceLogSnapshot,
+  ServiceLogLineEvent,
 } from "@/lib/domain/models";
+
+export type { UnlistenFn } from "@tauri-apps/api/event";
 
 function isTauriRuntime() {
   return Boolean(window.__TAURI_INTERNALS__);
@@ -149,6 +152,26 @@ export async function checkPortInUse(port: number): Promise<boolean> {
 export async function updateServiceOrder(projectId: string, serviceIds: string[]): Promise<DashboardSnapshot> {
   if (!isTauriRuntime()) throw new Error("Solo disponible en la app de escritorio.");
   return invokeDesktop<DashboardSnapshot>("update_service_order", { projectId, serviceIds });
+}
+
+// ---------------------------------------------------------------------------
+// Event listeners (push)
+// ---------------------------------------------------------------------------
+
+export async function listenDashboardUpdates(cb: (snap: DashboardSnapshot) => void) {
+  if (!isTauriRuntime()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<DashboardSnapshot>("dashboard-update", (event) => {
+    cb(event.payload);
+  });
+}
+
+export async function listenServiceLogLine(cb: (payload: ServiceLogLineEvent) => void) {
+  if (!isTauriRuntime()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<ServiceLogLineEvent>("service-log-line", (event) => {
+    cb(event.payload);
+  });
 }
 
 // ---------------------------------------------------------------------------

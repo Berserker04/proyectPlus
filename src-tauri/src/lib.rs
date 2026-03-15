@@ -153,6 +153,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(storage::RuntimeSupervisor::default())
         .manage(storage::TelemetryCache::default())
+        .manage(storage::RefreshConfig::default())
         .invoke_handler(tauri::generate_handler![
             get_catalog_snapshot,
             get_app_settings,
@@ -179,6 +180,7 @@ pub fn run() {
         .expect("error while building tauri application");
 
     storage::initialize_database(&app.handle()).expect("failed to initialize database");
+    storage::start_background_ticker(app.handle().clone());
 
     app.run(|app_handle, event| {
         if let RunEvent::ExitRequested { .. } = event {

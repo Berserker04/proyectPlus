@@ -6,6 +6,8 @@
 
 use crate::models::{
     AppSettings, DashboardSnapshot, Microservice, MicroserviceDraft, Project, ProjectDraft,
+    RunServiceResponse, ServiceActionIssue, ServiceActionResponse,
+    ServiceLogEntry, ServiceLogLineEvent, ServiceLogSnapshot,
     SystemMetrics,
 };
 use chrono::Utc;
@@ -14,6 +16,7 @@ use sysinfo::System;
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
+use super::events::RefreshConfig;
 use super::runtime::{get_live_status, stop_service, RuntimeSupervisor, TelemetryCache};
 
 // ---------------------------------------------------------------------------
@@ -241,6 +244,12 @@ pub fn save_app_settings(app: &AppHandle, settings: AppSettings) -> Result<AppSe
         params![SETTINGS_KEY, SETTINGS_SCOPE, json, now],
     )
     .map_err(|e| e.to_string())?;
+
+    // Actualizar el intervalo del ticker de fondo en tiempo real
+    if let Ok(mut ms) = app.state::<RefreshConfig>().dashboard_ms.lock() {
+        *ms = (settings.dashboard_refresh_seconds as u64) * 1000;
+    }
+
     Ok(settings)
 }
 

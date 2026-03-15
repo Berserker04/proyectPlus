@@ -1,0 +1,50 @@
+    Checking ms-control-center v0.1.0 (C:\Users\USER\Documents\GitHub\proyectsplus\src-tauri)
+error[E0432]: unresolved import `super::runtime::RefreshConfig`
+  --> src\storage\db.rs:17:53
+   |
+17 | use super::runtime::{get_live_status, stop_service, RefreshConfig, RuntimeSupervisor, TelemetryCache};
+   |                                                     ^^^^^^^^^^^^^ no `RefreshConfig` in `storage::runtime`
+   |
+   = help: consider importing this struct through its public re-export instead:
+           crate::storage::RefreshConfig
+
+warning: unused import: `Microservice`
+  --> src\storage\runtime.rs:13:5
+   |
+13 |     Microservice, RunServiceResponse, ServiceActionIssue, ServiceActionResponse,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `emit_dashboard_update`
+  --> src\storage\mod.rs:24:18
+   |
+24 | pub use events::{emit_dashboard_update, start_background_ticker, RefreshConfig};
+   |                  ^^^^^^^^^^^^^^^^^^^^^
+
+error[E0597]: `config` does not live long enough
+  --> src\storage\events.rs:44:14
+   |
+43 |             let config = app.state::<RefreshConfig>();
+   |                 ------ binding `config` declared here
+44 |             *config.dashboard_ms.lock().unwrap()
+   |              ^^^^^^-----------------------------
+   |              |
+   |              borrowed value does not live long enough
+   |              a temporary with access to the borrow is created here ...
+45 |         };
+   |         -- ... and the borrow might be used here, when that temporary is dropped and runs the `Drop` code for type `std::sync::MutexGuard`
+   |         |
+   |         `config` dropped here while still borrowed
+   |
+   = note: the temporary is part of an expression at the end of a block;
+           consider forcing this temporary to be dropped sooner, before the block's local variables are dropped
+help: for example, you could save the expression's value in a new local variable `x` and then make `x` be the expression at the end of the block
+   |
+44 |             let x = *config.dashboard_ms.lock().unwrap(); x
+   |             +++++++                                     +++
+
+Some errors have detailed explanations: E0432, E0597.
+For more information about an error, try `rustc --explain E0432`.
+warning: `ms-control-center` (lib) generated 2 warnings
+error: could not compile `ms-control-center` (lib) due to 2 previous errors; 2 warnings emitted

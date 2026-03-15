@@ -137,3 +137,16 @@ pub struct ServiceActionResponse {
 }
 
 pub type RunServiceResponse = ServiceActionResponse;
+
+// ---------------------------------------------------------------------------
+// Event payloads
+// ---------------------------------------------------------------------------
+
+/// Payload del evento `service-log-line` emitido por los hilos lectores
+/// de stdout/stderr por cada nueva línea capturada.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceLogLineEvent {
+    pub service_id: String,
+    pub entry: ServiceLogEntry,
+}

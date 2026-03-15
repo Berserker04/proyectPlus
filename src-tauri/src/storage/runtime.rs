@@ -3,11 +3,15 @@
 // Responsabilidad: tipos de runtime (RuntimeSupervisor, TelemetryCache,
 // LogBuffer), spawn/stop/restart de procesos, captura de logs en memoria,
 // limpieza al cerrar la app y evaluación del estado en vivo de un servicio.
+//
+// Cambios respecto a la versión anterior:
+//   • run_service emite "service-log-line" desde los hilos lectores de I/O.
+//   • run_service / stop_service / restart_service emiten "dashboard-update".
 // ---------------------------------------------------------------------------
 
 use crate::models::{
-    Microservice, RunServiceResponse, ServiceActionIssue, ServiceActionResponse,
-    ServiceLogEntry, ServiceLogSnapshot,
+    RunServiceResponse, ServiceActionIssue, ServiceActionResponse,
+    ServiceLogEntry, ServiceLogLineEvent, ServiceLogSnapshot,
 };
 use chrono::Utc;
 use std::{
@@ -18,9 +22,10 @@ use std::{
     thread,
 };
 use sysinfo::{Pid, System};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use super::db::{build_snapshot, open_db};
+use super::events::emit_dashboard_update;
 use super::metrics::is_port_open;
 
 // ---------------------------------------------------------------------------
@@ -86,12 +91,12 @@ pub(crate) struct LiveStatus {
     pub cpu_percent: f64,
     pub memory_bytes: u64,
     pub last_signal: String,
-    pub issue: Option<ServiceActionIssue>,
+    pub issue: Option<crate::models::ServiceActionIssue>,
     pub port_conflict: bool,
 }
 
 /// Calcula el estado en tiempo real de un servicio cruzando el supervisor
-/// de procesos con la información de sysinfo.
+/// de procesos con sysinfo.
 pub(crate) fn get_live_status(
     service_id: &str,
     expected_port: Option<u16>,
@@ -115,7 +120,6 @@ pub(crate) fn get_live_status(
                 port_conflict: false,
             };
         }
-        // El proceso murió de forma inesperada.
         return LiveStatus {
             status: "error".to_string(),
             pid: None,
@@ -128,7 +132,6 @@ pub(crate) fn get_live_status(
         };
     }
 
-    // El proceso no fue iniciado por nosotros — detectar si hay uno externo.
     if let Some(port) = expected_port {
         if is_port_open(port) {
             return LiveStatus {
@@ -157,6 +160,22 @@ pub(crate) fn get_live_status(
 }
 
 // ---------------------------------------------------------------------------
+// Helpers privados para emitir log line
+// ---------------------------------------------------------------------------
+
+/// Emite el evento "service-log-line" con la última entrada del buffer.
+/// Llamado desde los hilos lectores de stdout/stderr.
+fn emit_log_line(app: &AppHandle, service_id: &str, entry: ServiceLogEntry) {
+    let _ = app.emit(
+        "service-log-line",
+        ServiceLogLineEvent {
+            service_id: service_id.to_string(),
+            entry,
+        },
+    );
+}
+
+// ---------------------------------------------------------------------------
 // API pública — runtime de servicios
 // ---------------------------------------------------------------------------
 
@@ -182,11 +201,8 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
         });
     }
 
-    // Detener cualquier proceso previo.
     let _ = stop_service(app, service_id);
 
-    // En Windows los wrappers de Node (npm.cmd, pnpm.cmd…) no son binarios
-    // nativos. Se pasan siempre por `cmd /C` para que el PATH los resuelva.
     #[cfg(target_os = "windows")]
     let child_result = Command::new("cmd")
         .args(["/C", cmd.trim()])
@@ -220,22 +236,37 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
         Ok(mut child) => {
             let log_buf = Arc::new(Mutex::new(LogBuffer::default()));
 
-            // Hilo lector de stdout.
+            // ── Hilo lector de stdout ──────────────────────────────────────
             if let Some(out) = child.stdout.take() {
                 let buf = Arc::clone(&log_buf);
+                let app_clone = app.clone();
+                let sid = service_id.to_string();
                 thread::spawn(move || {
                     for line in BufReader::new(out).lines().flatten() {
-                        buf.lock().unwrap().append("stdout", line);
+                        let mut locked = buf.lock().unwrap();
+                        locked.append("stdout", line);
+                        // Emitir la entrada recién añadida al frontend
+                        if let Some(entry) = locked.entries.last().cloned() {
+                            drop(locked);
+                            emit_log_line(&app_clone, &sid, entry);
+                        }
                     }
                 });
             }
 
-            // Hilo lector de stderr.
+            // ── Hilo lector de stderr ──────────────────────────────────────
             if let Some(err) = child.stderr.take() {
                 let buf = Arc::clone(&log_buf);
+                let app_clone = app.clone();
+                let sid = service_id.to_string();
                 thread::spawn(move || {
                     for line in BufReader::new(err).lines().flatten() {
-                        buf.lock().unwrap().append("stderr", line);
+                        let mut locked = buf.lock().unwrap();
+                        locked.append("stderr", line);
+                        if let Some(entry) = locked.entries.last().cloned() {
+                            drop(locked);
+                            emit_log_line(&app_clone, &sid, entry);
+                        }
                     }
                 });
             }
@@ -247,8 +278,11 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
                 .unwrap()
                 .insert(service_id.to_string(), ProcessEntry { child, log_buf });
 
+            let snapshot = build_snapshot(app)?;
+            // Emitir evento push para sincronizar otros listeners del frontend
+            emit_dashboard_update(app);
             Ok(RunServiceResponse {
-                snapshot: build_snapshot(app)?,
+                snapshot,
                 issue: None,
             })
         }
@@ -270,8 +304,10 @@ pub fn stop_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionRe
         let _ = entry.child.wait();
     }
     drop(procs);
+    let snapshot = build_snapshot(app)?;
+    emit_dashboard_update(app);
     Ok(ServiceActionResponse {
-        snapshot: build_snapshot(app)?,
+        snapshot,
         issue: None,
     })
 }
@@ -279,6 +315,7 @@ pub fn stop_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionRe
 pub fn restart_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionResponse, String> {
     let _ = stop_service(app, service_id)?;
     let run_result = run_service(app, service_id)?;
+    // emit_dashboard_update ya fue llamado dentro de stop_service y run_service
     Ok(ServiceActionResponse {
         snapshot: run_result.snapshot,
         issue: run_result.issue,
@@ -350,8 +387,6 @@ pub fn cleanup_runtime(app: &AppHandle) -> Result<(), String> {
 // Utilidades privadas
 // ---------------------------------------------------------------------------
 
-/// Parser simple de comandos con soporte básico de comillas.
-/// Solo se usa en plataformas no-Windows.
 #[allow(dead_code)]
 fn split_command(cmd: &str) -> (String, Vec<String>) {
     let mut parts = Vec::new();
