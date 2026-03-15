@@ -1,31 +1,37 @@
 [[set]]
 identifier = "catalog-read"
-description = "Permite leer el catalogo, settings y snapshots operativos desde la ventana principal."
+description = "Permite leer el snapshot del dashboard, settings y logs desde la ventana principal."
 permissions = [
   "allow-get-catalog-snapshot",
   "allow-get-app-settings",
   "allow-get-service-logs",
-  "allow-get-service-execution-history",
-  "allow-get-k6-lab-snapshot",
-  "allow-get-k6-run-snapshot",
 ]
 
 [[set]]
-identifier = "workspace-management"
-description = "Permite seleccionar workspaces, persistir settings y mantener manifests o preferencias locales."
+identifier = "project-management"
+description = "Permite crear, editar, eliminar y seleccionar proyectos."
 permissions = [
-  "allow-save-app-settings",
-  "allow-pick-app-settings-path",
-  "allow-select-workspace-root",
-  "allow-rescan-active-workspace",
-  "allow-register-manual-service",
-  "allow-register-k6-script",
-  "allow-save-k6-lab-preferences",
+  "allow-create-project",
+  "allow-update-project",
+  "allow-delete-project",
+  "allow-select-project",
+]
+
+[[set]]
+identifier = "microservice-management"
+description = "Permite registrar, editar y eliminar microservicios manualmente."
+permissions = [
+  "allow-create-microservice",
+  "allow-update-microservice",
+  "allow-delete-microservice",
+  "allow-select-directory",
+  "allow-check-port-in-use",
+  "allow-update-service-order",
 ]
 
 [[set]]
 identifier = "service-runtime"
-description = "Permite operar servicios supervisados, abrir recursos locales y exportar logs."
+description = "Permite operar servicios supervisados, abrir recursos locales y gestionar logs."
 permissions = [
   "allow-run-service",
   "allow-stop-service",
@@ -33,16 +39,13 @@ permissions = [
   "allow-open-service-folder",
   "allow-open-service-terminal",
   "allow-clear-service-logs",
-  "allow-export-service-logs",
 ]
 
 [[set]]
-identifier = "k6-runtime"
-description = "Permite validar, ejecutar y cancelar corridas k6 locales desde la app."
+identifier = "settings-write"
+description = "Permite persistir la configuracion de la aplicacion."
 permissions = [
-  "allow-validate-k6-setup",
-  "allow-start-k6-run",
-  "allow-cancel-k6-run",
+  "allow-save-app-settings",
 ]
 
 [[set]]
@@ -50,7 +53,8 @@ identifier = "desktop-main"
 description = "Capability agregada de la ventana principal para el MVP local de MS Control Center."
 permissions = [
   "catalog-read",
-  "workspace-management",
+  "project-management",
+  "microservice-management",
   "service-runtime",
-  "k6-runtime",
+  "settings-write",
 ]

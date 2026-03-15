@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-microservice"
+description = "Enables the delete_microservice command without any pre-configured scope."
+commands.allow = ["delete_microservice"]
+
+[[permission]]
+identifier = "deny-delete-microservice"
+description = "Denies the delete_microservice command without any pre-configured scope."
+commands.deny = ["delete_microservice"]

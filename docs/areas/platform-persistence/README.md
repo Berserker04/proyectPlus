@@ -24,6 +24,7 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - `user_preference` pasa a ser la capa generica para preferencias persistidas con scope `global` y `workspace`, preparada para reutilizarse en `Settings`.
 - El laboratorio k6 ya restaura su ultimo contexto por workspace (`service`, `script`, `profile`, `vus`, `duration`, `rate`, `thresholds`) y conserva `k6BinaryPath` como preferencia global.
 - La pantalla `Settings` ya persiste tema, refresh operativo, modo GPU, rutas por defecto, shell preferida y `k6BinaryPath`, y reutiliza el mismo contrato de `user_preference`.
+- La UI ahora renderiza una sola identidad visual firma; la preferencia `theme` se conserva solo como compatibilidad de persistencia y ya no define variantes visibles del shell.
 - El selector de workspace y la exportacion de logs ya usan las rutas por defecto configuradas en `Settings` como hint del dialogo nativo.
 - La apertura rapida de terminal ya respeta la shell preferida configurada en `Settings` y ahora bloquea shells fuera de `allowedShells`.
 - El modo GPU `disabled` ya evita consultas best effort de `nvidia-smi` sin afectar CPU, RAM, puertos ni uptime.
@@ -38,6 +39,9 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - La capability `default` ahora queda reducida a la ventana `main`, modo local, y consume solo el set `desktop-main` definido en `src-tauri/permissions/app-desktop.toml`.
 - Los comandos sensibles quedan agrupados por sets (`catalog-read`, `workspace-management`, `service-runtime`, `k6-runtime`) para preparar una futura segmentacion por ventanas o webviews sin reabrir el IPC entero.
 - El dashboard, Settings y el laboratorio k6 ya no muestran copy de avance tecnico ni paneles internos de infraestructura; solo mensajes funcionales o restricciones accionables.
+- La shell frontend ya quedo fragmentada en sidebar, resumen, servicios, laboratorio k6 y ajustes, sin introducir routing ni cambiar contratos Tauri o SQLite.
+- La inicializacion de schema SQLite ahora ocurre una sola vez al arrancar la app; `open_connection()` queda como apertura liviana para no penalizar cada comando del polling.
+- La plataforma ahora mantiene caches internos para telemetria del dashboard y para el ultimo reporte k6 parseado, desacoplando rutas caras de persistencia y lectura frecuente.
 
 ## Checklist local
 - [x] `T5.1.1 | US5.1 |` Definir esquema SQLite para `Workspace`, `Service`, `ProcessInstance`, `K6Script` y `K6Run`.
@@ -46,14 +50,17 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - [x] `T5.2.1 | US5.2 |` Persistir historial de ejecuciones de servicios.
 - [x] `T5.2.2 | US5.2 |` Persistir historial de corridas k6 y preferencias del usuario.
 - [x] `T5.2.3 | US5.2 |` Implementar pantalla `Settings` con rutas por defecto, shell permitida, refresh, tema, GPU y `k6 path`.
+- [x] `T5.2.4 | US5.2 |` Mover inicializacion de schema y persistencia frecuente a rutas livianas para que SQLite y preferencias no penalicen cada refresh operativo.
 - [x] `T5.3.1 | US5.3 |` Aplicar allowlist estricta de comandos y rutas permitidas.
 - [x] `T5.3.2 | US5.3 |` Encapsular shell y procesos mediante capacidades de Tauri.
 - [x] `T5.3.3 | US5.3 |` Definir y aplicar la politica de limpieza o marcado de procesos huerfanos al cerrar la app.
 
 ## Cambios no previstos incorporados
+- [x] `SC-005` Pasada de estabilizacion desktop con init de schema una vez por proceso, cache de snapshot/reportes y rutas de persistencia livianas para polling operativo.
 - [x] `SC-001` Bootstrap tecnico del repo con estructura React/Vite, base `src-tauri`, configuracion inicial y shell visual para empezar las historias funcionales.
 - [x] `SC-002` Recurso minimo `src-tauri/icons/icon.ico` agregado para destrabar la validacion nativa de Tauri en Windows.
 - [x] `SC-003` Limpieza del snapshot publico y de la UI para remover paneles internos de toolchain/bootstrap y mensajes de avance tecnico.
+- [x] `SC-004` Rediseño integral de la shell UI/UX con una sola identidad visual, navegacion lateral persistente y reorganizacion completa de las superficies frontend sin cambiar persistencia ni backend.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

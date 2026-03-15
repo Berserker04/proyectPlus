@@ -1,0 +1,6 @@
+[[permission]]
+identifier = "allow-update-service-order"
+description = "Enables the update_service_order command."
+commands.allow = [
+  "update_service_order",
+]

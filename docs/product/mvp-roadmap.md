@@ -37,6 +37,7 @@ Definition of done:
 - [x] `T1.4.1 | US1.4 |` Disenar la vista principal con nombre, ruta, framework, estado, PID, puerto y uptime.
 - [x] `T1.4.2 | US1.4 |` Implementar orden por nombre, estado, puerto, RAM, CPU y fecha de inicio.
 - [x] `T1.4.3 | US1.4 |` Implementar filtros por estado, tipo de servicio, tags y busqueda textual.
+- [x] `T1.4.4 | US1.4 |` Estabilizar la pantalla de servicios con subarboles mas estables, memoizacion y refresco contextual sin degradar el SLA visual.
 
 ## E2 - Operacion de servicios
 Dependencias de epica:
@@ -77,6 +78,7 @@ Definition of done:
 - [x] `T3.1.1 | US3.1 |` Recolectar CPU y RAM por proceso y totales del sistema.
 - [x] `T3.1.2 | US3.1 |` Resolver puertos en escucha y uptime por servicio.
 - [x] `T3.1.3 | US3.1 |` Emitir refrescos de estado cada 1 o 2 segundos sin bloquear la UI.
+- [x] `T3.1.4 | US3.1 |` Cachear telemetria y probes de puerto por ciclo de dashboard para sostener el polling de 1s/2s sin recalculo nativo redundante.
 
 ### [x] US3.2 - Exponer GPU global y por proceso cuando aplique
 - [x] `T3.2.1 | US3.2 |` Integrar lectura de GPU global con soporte prioritario para NVIDIA.
@@ -87,6 +89,7 @@ Definition of done:
 - [x] `T3.3.1 | US3.3 |` Capturar `stdout` y `stderr` en un buffer en memoria por servicio.
 - [x] `T3.3.2 | US3.3 |` Implementar resaltado por nivel, busqueda y limpieza del buffer visible.
 - [x] `T3.3.3 | US3.3 |` Implementar pausa de autoscroll y exportacion manual de logs.
+- [x] `T3.3.4 | US3.3 |` Limitar polling y render de logs e historial solo a la pestana visible del inspector para evitar trabajo oculto y scroll encadenado.
 
 ## E4 - Laboratorio k6
 Dependencias de epica:
@@ -112,6 +115,7 @@ Definition of done:
 - [x] `T4.3.1 | US4.3 |` Parsear metricas clave: `avg`, `p95`, `p99`, `rps`, errores, VUs, duracion, checks y thresholds.
 - [x] `T4.3.2 | US4.3 |` Renderizar graficas dentro de la app con `ECharts`.
 - [x] `T4.3.3 | US4.3 |` Exponer historial basico de corridas y opcion de abrir dashboard externo cuando se habilite.
+- [x] `T4.3.4 | US4.3 |` Reutilizar instancias de chart y cachear el ultimo reporte k6 para evitar parseo y recreacion completa por cada poll activo.
 
 ## E5 - Persistencia y settings
 Dependencias de epica:
@@ -131,6 +135,7 @@ Definition of done:
 - [x] `T5.2.1 | US5.2 |` Persistir historial de ejecuciones de servicios.
 - [x] `T5.2.2 | US5.2 |` Persistir historial de corridas k6 y preferencias del usuario.
 - [x] `T5.2.3 | US5.2 |` Implementar pantalla `Settings` con rutas por defecto, shell permitida, refresh, tema, GPU y `k6 path`.
+- [x] `T5.2.4 | US5.2 |` Mover inicializacion de schema y persistencia frecuente a rutas livianas para que SQLite y preferencias no penalicen cada refresh operativo.
 
 ### [x] US5.3 - Aplicar guardrails de seguridad y limpieza de procesos
 - [x] `T5.3.1 | US5.3 |` Aplicar allowlist estricta de comandos y rutas permitidas.
@@ -138,8 +143,12 @@ Definition of done:
 - [x] `T5.3.3 | US5.3 |` Definir y aplicar la politica de limpieza o marcado de procesos huerfanos al cerrar la app.
 
 ## Scope changes
+- [ ] `SC-006 | discovery, operations, observability, platform-persistence |` Reorientar el producto al MVP manual del PRD canonico: proyectos y microservicios manuales, runtime basico, logs, CPU/RAM y graficas ligeras; retirar autodiscovery, k6, GPU y superficies fuera de alcance.
+- [x] `SC-007 | operations, observability, ui |` Implementar mejoras de UX: Bulk Actions (proyectos), Selección nativa de directorios, Toasts Notifications, Sidebar status, validación de puertos ocupados, reordenamiento Drag & Drop, resaltado y filtros de logs.
 - [x] `SC-001 | platform-persistence |` Bootstrap tecnico del repo con estructura manual React/Vite, base `src-tauri`, configuracion inicial y shell visual del dashboard para iniciar la implementacion funcional.
 - [x] `SC-002 | platform-persistence |` Agregar el recurso minimo `src-tauri/icons/icon.ico` para permitir validacion nativa de Tauri en Windows durante el desarrollo local.
 - [x] `SC-003 | discovery, platform-persistence |` Remover del producto y del snapshot publico los paneles internos de toolchain/bootstrap y el copy de avance tecnico, dejando solo informacion funcional y operativa en dashboard, settings y laboratorio k6.
+- [x] `SC-004 | discovery, operations, observability, k6-lab, platform-persistence |` Redisenar integralmente la shell UI/UX con estetica dark premium, navegacion lateral persistente, resumen ejecutivo, vista maestro-detalle de servicios, laboratorio k6 dedicado y una sola identidad visual firma manteniendo los contratos backend existentes.
+- [x] `SC-005 | discovery, observability, k6-lab, platform-persistence |` Pasada profesional de estabilizacion de rendimiento desktop: cache de telemetria y reportes, polling contextual por vista y reutilizacion de subarboles/charts para sostener fluidez sin bajar la cadencia de refresh.
 - Plantilla de registro:
   - [ ] `SC-001 | area |` Descripcion del cambio detectado, razon, impacto en historias y docs afectados.

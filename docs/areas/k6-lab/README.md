@@ -25,6 +25,11 @@ Esta area cubre la integracion local con k6: seleccion de scripts, perfiles de p
 - `k6BinaryPath` ahora tambien puede configurarse desde la pantalla global de `Settings`, y ambos flujos comparten la misma preferencia persistida para evitar drift.
 - `k6BinaryPath` ya no acepta ejecutables arbitrarios: solo se permite un binario llamado `k6` o `k6.exe`, y la ruta se rechaza antes de guardarse o ejecutar validaciones/corridas si no cumple ese contrato.
 - Las acciones `validate`, `run` y `cancel` del laboratorio ya quedan encapsuladas por permisos explicitos del app manifest dentro del set `k6-runtime`, accesible solo desde la ventana `main`.
+- El laboratorio k6 ya no comparte superficie con el dashboard general: ahora tiene una pantalla dedicada con contexto activo, perfiles, validacion, corrida viva, ultimo reporte e historial en la misma narrativa visual.
+- El rediseño conserva la logica y persistencia existentes, pero reorganiza el flujo para reducir ruido operativo y dejar las corridas k6 como una vista de trabajo propia.
+
+- El autosave de preferencias del laboratorio ya no re-sincroniza scripts autodetectados del workspace; el rescaneo queda solo en carga inicial, refresh explicito y altas manuales.
+- El ultimo reporte k6 ahora se cachea por `run_id` y `mtime` del artefacto, mientras las superficies ECharts reutilizan su instancia para no reconstruirse por cada poll.
 
 ## Checklist local
 - [x] `T4.1.1 | US4.1 |` Descubrir o registrar scripts k6 por servicio o endpoint.
@@ -36,9 +41,11 @@ Esta area cubre la integracion local con k6: seleccion de scripts, perfiles de p
 - [x] `T4.3.1 | US4.3 |` Parsear metricas clave: `avg`, `p95`, `p99`, `rps`, errores, VUs, duracion, checks y thresholds.
 - [x] `T4.3.2 | US4.3 |` Renderizar graficas dentro de la app con `ECharts`.
 - [x] `T4.3.3 | US4.3 |` Exponer historial basico de corridas y opcion de abrir dashboard externo cuando se habilite.
+- [x] `T4.3.4 | US4.3 |` Reutilizar instancias de chart y cachear el ultimo reporte k6 para evitar parseo y recreacion completa por cada poll activo.
 
 ## Cambios no previstos incorporados
-- Ninguno por ahora.
+- `SC-005`: se estabilizo el laboratorio k6 separando autosave, rescaneo y parseo de reportes para mantener fluidez durante corridas y edicion de parametros.
+- `SC-004`: se convirtio el laboratorio k6 en una pantalla dedicada dentro de la nueva shell, alineada al PRD y a la identidad visual firma.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

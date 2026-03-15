@@ -27,16 +27,10 @@ type SettingsFormState = {
   k6BinaryPath: string;
 };
 
-const themeOptions: Array<{ value: AppSettings["theme"]; label: string; detail: string }> = [
-  { value: "midnight", label: "Midnight", detail: "Azul oscuro, alto contraste y acentos frios." },
-  { value: "ember", label: "Ember", detail: "Fondo carbon con acentos ambar y tono mas calido." },
-  { value: "arctic", label: "Arctic", detail: "Oscuro grafito con acentos mas limpios y tecnicos." },
-];
-
 const gpuOptions: Array<{ value: AppSettings["gpuMode"]; label: string; detail: string }> = [
   { value: "auto", label: "Auto", detail: "Consulta GPU cuando el entorno lo soporta." },
-  { value: "disabled", label: "Disabled", detail: "Desactiva las consultas de GPU para ahorrar ruido o compatibilidad." },
-  { value: "nvidia", label: "NVIDIA only", detail: "Mantiene el modo actual basado en nvidia-smi." },
+  { value: "disabled", label: "Desactivado", detail: "Evita consultas GPU y reduce ruido en entornos sin soporte." },
+  { value: "nvidia", label: "Solo NVIDIA", detail: "Fuerza el modo actual basado en nvidia-smi." },
 ];
 
 export function SettingsPanel(props: SettingsPanelProps) {
@@ -73,7 +67,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
     } catch (error: unknown) {
       props.onFeedback({
         tone: "error",
-        message: "No fue posible abrir el selector de rutas de Settings.",
+        message: "No fue posible abrir el selector de rutas de ajustes.",
         detail: error instanceof Error ? error.message : null,
       });
     } finally {
@@ -91,7 +85,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
       props.onFeedback({
         tone: "success",
         message: "Configuracion guardada.",
-        detail: `Tema ${savedSettings.theme}, refresh ${savedSettings.dashboardRefreshSeconds}s/${savedSettings.realtimeRefreshSeconds}s, GPU ${savedSettings.gpuMode}.`,
+        detail: `Cadencia ${savedSettings.dashboardRefreshSeconds}s/${savedSettings.realtimeRefreshSeconds}s, GPU ${savedSettings.gpuMode}.`,
       });
     } catch (error: unknown) {
       props.onFeedback({
@@ -105,27 +99,27 @@ export function SettingsPanel(props: SettingsPanelProps) {
   }
 
   return (
-    <section className="settings-screen">
+    <section className="screen-shell settings-screen">
       <div className="panel settings-hero">
         <div>
-          <p className="eyebrow">Settings</p>
-          <h3>Configuracion general</h3>
+          <p className="eyebrow">Ajustes</p>
+          <h3>Entorno de trabajo</h3>
           <p className="lede">
-            Ajusta rutas por defecto, shell, frecuencia de refresco, tema, modo GPU y
-            la ruta del binario k6 para adaptar la app a tu entorno local.
+            Ajusta rutas, shells permitidas, cadencia de actualizacion, modo GPU y la ruta del binario
+            de k6. La interfaz ahora usa una sola identidad visual firma.
           </p>
         </div>
         <div className="summary-strip">
           <div className="summary-badge">
-            <span>Tema</span>
-            <strong>{props.settings.theme}</strong>
+            <span>Identidad</span>
+            <strong>Firma ejecutiva</strong>
           </div>
           <div className="summary-badge">
             <span>GPU</span>
             <strong>{props.settings.gpuMode}</strong>
           </div>
           <div className="summary-badge">
-            <span>Refresh</span>
+            <span>Cadencia</span>
             <strong>{props.settings.dashboardRefreshSeconds}s / {props.settings.realtimeRefreshSeconds}s</strong>
           </div>
         </div>
@@ -134,12 +128,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
       <div className="settings-grid">
         <div className="panel settings-card">
           <div className="section-heading">
-            <h3>Rutas por defecto</h3>
+            <h3>Rutas base</h3>
             <span>Global</span>
           </div>
           <div className="manual-form-grid">
             <label className="control control-wide">
-              <span>Workspace root</span>
+              <span>Carpeta base del workspace</span>
               <input
                 type="text"
                 value={form.defaultWorkspaceRoot}
@@ -157,11 +151,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 onClick={() => void handlePickPath("workspaceRoot", "defaultWorkspaceRoot")}
                 disabled={!props.isDesktopRuntime || pickingKind !== null}
               >
-                {pickingKind === "workspaceRoot" ? "Selecting..." : "Browse workspace root"}
+                {pickingKind === "workspaceRoot" ? "Seleccionando..." : "Explorar workspace"}
               </button>
             </div>
             <label className="control control-wide">
-              <span>Export root</span>
+              <span>Ruta de exportacion</span>
               <input
                 type="text"
                 value={form.defaultLogExportRoot}
@@ -179,11 +173,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 onClick={() => void handlePickPath("logExportRoot", "defaultLogExportRoot")}
                 disabled={!props.isDesktopRuntime || pickingKind !== null}
               >
-                {pickingKind === "logExportRoot" ? "Selecting..." : "Browse export root"}
+                {pickingKind === "logExportRoot" ? "Seleccionando..." : "Explorar exportacion"}
               </button>
             </div>
             <label className="control control-wide">
-              <span>k6 binary path</span>
+              <span>Binario k6</span>
               <input
                 type="text"
                 value={form.k6BinaryPath}
@@ -201,25 +195,24 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 onClick={() => void handlePickPath("k6BinaryFile", "k6BinaryPath")}
                 disabled={!props.isDesktopRuntime || pickingKind !== null}
               >
-                {pickingKind === "k6BinaryFile" ? "Selecting..." : "Browse k6 binary"}
+                {pickingKind === "k6BinaryFile" ? "Seleccionando..." : "Explorar k6"}
               </button>
             </div>
           </div>
           <p className="form-hint">
-            Estas rutas se reutilizan como punto de partida al seleccionar un workspace,
-            exportar logs o validar el binario de k6. La app solo acepta ejecutables
-            llamados <code>k6</code> o <code>k6.exe</code>.
+            Estas rutas se reutilizan para seleccionar workspaces, exportar logs y validar el
+            ejecutable de k6. Solo se permite <code>k6</code> o <code>k6.exe</code>.
           </p>
         </div>
 
         <div className="panel settings-card">
           <div className="section-heading">
-            <h3>Shell y refresh</h3>
+            <h3>Shell y actualizacion</h3>
             <span>Operativo</span>
           </div>
           <div className="manual-form-grid">
             <label className="control">
-              <span>Preferred shell</span>
+              <span>Shell preferida</span>
               <select
                 value={form.preferredShell}
                 onChange={(event) => setForm((current) => ({
@@ -233,7 +226,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
               </select>
             </label>
             <label className="control">
-              <span>Dashboard refresh (s)</span>
+              <span>Cadencia del panel (s)</span>
               <input
                 type="number"
                 min="1"
@@ -246,7 +239,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
               />
             </label>
             <label className="control control-wide">
-              <span>Allowed shells</span>
+              <span>Shells permitidas</span>
               <textarea
                 value={form.allowedShells}
                 onChange={(event) => setForm((current) => ({
@@ -258,7 +251,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
               />
             </label>
             <label className="control">
-              <span>Realtime refresh (s)</span>
+              <span>Cadencia en vivo (s)</span>
               <input
                 type="number"
                 min="1"
@@ -272,48 +265,34 @@ export function SettingsPanel(props: SettingsPanelProps) {
             </label>
           </div>
           <p className="form-hint">
-            <code>Open terminal</code> solo usa shells incluidas en esta lista. Si la shell
-            preferida no esta permitida, la apertura se bloquea.
+            <code>Abrir terminal</code> solo usa shells incluidas en esta lista. Si la preferida no
+            esta permitida, la accion se bloquea.
           </p>
         </div>
 
-        <div className="panel settings-card">
+        <div className="panel settings-card settings-signature-card">
           <div className="section-heading">
-            <h3>Tema y GPU</h3>
-            <span>Visual y metricas</span>
+            <h3>Firma visual y GPU</h3>
+            <span>Producto</span>
           </div>
-          <div className="k6-profile-grid">
-            {themeOptions.map((theme) => (
-              <button
-                key={theme.value}
-                type="button"
-                className={`k6-profile-card ${form.theme === theme.value ? "is-active" : ""}`}
-                onClick={() => setForm((current) => ({
-                  ...current,
-                  theme: theme.value,
-                }))}
-              >
-                <strong>{theme.label}</strong>
-                <span>{theme.detail}</span>
-              </button>
-            ))}
-          </div>
-          <div className="manual-form-grid">
-            <label className="control control-wide">
-              <span>GPU mode</span>
-              <select
-                value={form.gpuMode}
-                onChange={(event) => setForm((current) => ({
-                  ...current,
-                  gpuMode: event.target.value as AppSettings["gpuMode"],
-                }))}
-              >
-                {gpuOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <p className="form-hint">
+            La app conserva <code>theme</code> por compatibilidad de persistencia, pero la UI ya no
+            expone variantes. Todo el shell se renderiza con una sola identidad visual.
+          </p>
+          <label className="control control-wide">
+            <span>Modo GPU</span>
+            <select
+              value={form.gpuMode}
+              onChange={(event) => setForm((current) => ({
+                ...current,
+                gpuMode: event.target.value as AppSettings["gpuMode"],
+              }))}
+            >
+              {gpuOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
           <ul className="architecture-list">
             {gpuOptions.map((option) => (
               <li key={option.value}>
@@ -326,21 +305,21 @@ export function SettingsPanel(props: SettingsPanelProps) {
 
         <div className="panel settings-card">
           <div className="section-heading">
-            <h3>Uso de la configuracion</h3>
-            <span>{hasChanges ? "Draft" : "Synced"}</span>
+            <h3>Aplicacion de cambios</h3>
+            <span>{hasChanges ? "Borrador" : "Sincronizado"}</span>
           </div>
           <ul className="architecture-list">
             <li>
               <strong>Aplicacion completa</strong>
-              <p>Tema, GPU, shell, refresco y rutas se reutilizan en toda la app.</p>
+              <p>Rutas, cadencias, shell y GPU se reutilizan en resumen, inspector y laboratorio.</p>
             </li>
             <li>
-              <strong>Laboratorio k6</strong>
-              <p>La ruta de k6 reaparece automaticamente en el laboratorio de pruebas.</p>
+              <strong>Compatibilidad</strong>
+              <p>La preferencia de tema se conserva en storage, aunque la UI ya no permita cambiarla.</p>
             </li>
             <li>
-              <strong>Workspace inicial</strong>
-              <p>El selector de carpetas vuelve a abrir donde lo dejaste configurado.</p>
+              <strong>Persistencia</strong>
+              <p>Los cambios se guardan solo en escritorio y reaparecen al abrir la app.</p>
             </li>
           </ul>
           <div className="action-row">
@@ -350,21 +329,19 @@ export function SettingsPanel(props: SettingsPanelProps) {
               onClick={() => setForm(buildSettingsForm(props.settings))}
               disabled={isSaving || !hasChanges}
             >
-              Reset draft
+              Resetear borrador
             </button>
             <button
               type="button"
               className="ghost-button"
               onClick={() => void handleSave()}
               disabled={isSaving || !hasChanges}
-            >
-              {isSaving ? "Saving..." : "Save settings"}
-            </button>
+              >
+                {isSaving ? "Guardando..." : "Guardar ajustes"}
+              </button>
           </div>
           {!props.isDesktopRuntime ? (
-            <p className="form-hint">
-              El guardado esta disponible solo en la app de escritorio.
-            </p>
+            <p className="form-hint">El guardado esta disponible solo en la app de escritorio.</p>
           ) : null}
         </div>
       </div>

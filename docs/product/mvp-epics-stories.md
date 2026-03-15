@@ -76,6 +76,7 @@ Estado actual:
 - `T1.4.1` completada.
 - `T1.4.2` completada.
 - `T1.4.3` completada.
+- `T1.4.4` completada.
 
 Criterios de aceptacion:
 - El dashboard muestra nombre, ruta, framework, estado, PID, puerto y uptime.
@@ -88,7 +89,7 @@ Dependencias:
 - `US3.1` para metricas en tiempo real
 
 Trazabilidad:
-- Roadmap: `T1.4.1`, `T1.4.2`, `T1.4.3`
+- Roadmap: `T1.4.1`, `T1.4.2`, `T1.4.3`, `T1.4.4`
 - Area: `areas/discovery/README.md`
 
 ## [x] E2 - Operacion de servicios
@@ -167,6 +168,7 @@ Estado actual:
 - `T3.1.1` completada.
 - `T3.1.2` completada.
 - `T3.1.3` completada.
+- `T3.1.4` completada.
 
 Criterios de aceptacion:
 - La UI refresca estado visible cada 1 o 2 segundos sin bloquearse.
@@ -177,7 +179,7 @@ Dependencias:
 - `US2.1`
 
 Trazabilidad:
-- Roadmap: `T3.1.1`, `T3.1.2`, `T3.1.3`
+- Roadmap: `T3.1.1`, `T3.1.2`, `T3.1.3`, `T3.1.4`
 - Area: `areas/observability/README.md`
 
 ### [x] US3.2 - Exponer GPU global y por proceso cuando aplique
@@ -207,6 +209,7 @@ Estado actual:
 - `T3.3.1` completada.
 - `T3.3.2` completada.
 - `T3.3.3` completada.
+- `T3.3.4` completada.
 
 Criterios de aceptacion:
 - La vista de logs separa `stdout` y `stderr`.
@@ -217,7 +220,7 @@ Dependencias:
 - `US2.1`
 
 Trazabilidad:
-- Roadmap: `T3.3.1`, `T3.3.2`, `T3.3.3`
+- Roadmap: `T3.3.1`, `T3.3.2`, `T3.3.3`, `T3.3.4`
 - Area: `areas/observability/README.md`
 
 ## [x] E4 - Laboratorio k6
@@ -272,6 +275,7 @@ Estado actual:
 - `T4.3.1` completada.
 - `T4.3.2` completada.
 - `T4.3.3` completada.
+- `T4.3.4` completada.
 
 Criterios de aceptacion:
 - La app persiste resumen y JSON crudo por corrida.
@@ -283,7 +287,7 @@ Dependencias:
 - `US5.2`
 
 Trazabilidad:
-- Roadmap: `T4.3.1`, `T4.3.2`, `T4.3.3`
+- Roadmap: `T4.3.1`, `T4.3.2`, `T4.3.3`, `T4.3.4`
 - Area: `areas/k6-lab/README.md`
 
 ## [x] E5 - Persistencia y settings
@@ -316,6 +320,7 @@ Estado actual:
 - `T5.2.1` completada.
 - `T5.2.2` completada.
 - `T5.2.3` completada.
+- `T5.2.4` completada.
 
 Criterios de aceptacion:
 - La app persiste historial de ejecuciones de servicios.
@@ -326,7 +331,7 @@ Dependencias:
 - `US5.1`
 
 Trazabilidad:
-- Roadmap: `T5.2.1`, `T5.2.2`, `T5.2.3`
+- Roadmap: `T5.2.1`, `T5.2.2`, `T5.2.3`, `T5.2.4`
 - Area: `areas/platform-persistence/README.md`
 
 ### [x] US5.3 - Aplicar guardrails de seguridad y limpieza de procesos
@@ -349,3 +354,28 @@ Dependencias:
 Trazabilidad:
 - Roadmap: `T5.3.1`, `T5.3.2`, `T5.3.3`
 - Area: `areas/platform-persistence/README.md`
+
+## Scope Changes (SC)
+
+### [x] SC-007 - Mejoras de UX (Bulk Actions, Native Dir, Toasts, Drag&Drop)
+Objetivo: Lograr que el panel de control se perciba mas robusto, fluido y profesional, agregando controles bulk, validacion proactiva de puertos y mejoras visuales sustanciales.
+
+Estado actual:
+- Validacion de rutas (folder picker) nativa mediante Tauri.
+- Alertas en forma de Toasts en lugar de Banners fijos.
+- Actions "Run All" y "Stop All" por proyecto.
+- Reordenamiento mediante HTML5 Drag and Drop guardado en SQLite.
+- Filtro rapido de Error/Stdout/Stderr y coloreo de mensajes en Logs.
+
+Criterios de aceptacion:
+- Toasts apilables en UI oscura.
+- El usuario puede elegir folder desde OS dialog.
+- La validacion alerta por puerto ocupado en bluro o arranque.
+- Se puede copiar y filtrar logs en un click.
+- El drag and drop preserva el orden entre sesiones.
+
+Dependencias:
+- N/A
+
+Trazabilidad:
+- Roadmap: `SC-007`

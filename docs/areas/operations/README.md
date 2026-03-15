@@ -24,6 +24,8 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - `Run` y `Restart` ya validan `startCommand` contra una allowlist estricta de launchers y rechazan chaining, pipes, redirecciones o rutas relativas que intenten salir del workspace activo.
 - `Open terminal` ya valida que la shell preferida este incluida en `allowedShells`; si no, la accion se bloquea con error estructurado en vez de abrir una shell arbitraria.
 - Esas acciones operativas ya no dependen de un IPC abierto por defecto: la ventana `main` las obtiene mediante permisos explicitos del app manifest agrupados en el set `service-runtime`.
+- La operacion ya no vive en una tabla ancha: la UI expone acciones primarias en tarjetas compactas y un inspector lateral con tabs de `Resumen`, `Logs`, `Historial` y `Configuracion`.
+- Los accesos rapidos operativos (`detener`, `reiniciar`, carpeta, terminal, copiar puerto/comando`) quedaron visibles tanto en la lista como en el inspector para reducir cambios de contexto.
 
 ## Checklist local
 - [x] `T2.1.1 | US2.1 |` Modelar la accion `Run` con feedback inmediato y estado `starting`.
@@ -37,7 +39,8 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - [x] `T2.3.3 | US2.3 |` Advertir puertos ocupados y enlazar la apertura de logs desde la UI.
 
 ## Cambios no previstos incorporados
-- Ninguno por ahora.
+- `SC-004`: se rediseño la experiencia operativa hacia un patron maestro-detalle con acciones compactas e inspector persistente, sin cambiar contratos del supervisor.
+- `SC-007`: se mejoró la UX sustancialmente, agregando controles bulk a nivel de proyecto (run all / stop all), notificaciones en toasts, validación de puertos ocupados mediante Tauri, filtros de logs, y reordenamiento del UI persistido en base de datos.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

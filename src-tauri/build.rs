@@ -6,29 +6,29 @@ fn main() {
     tauri_build::try_build(
         tauri_build::Attributes::new().app_manifest(
             tauri_build::AppManifest::new().commands(&[
+                // Dashboard & Settings
                 "get_catalog_snapshot",
                 "get_app_settings",
                 "save_app_settings",
-                "pick_app_settings_path",
-                "select_workspace_root",
-                "rescan_active_workspace",
-                "register_manual_service",
+                // Projects
+                "create_project",
+                "update_project",
+                "delete_project",
+                "select_project",
+                // Microservices
+                "create_microservice",
+                "update_microservice",
+                "delete_microservice",
+                // Service runtime
                 "run_service",
                 "stop_service",
                 "restart_service",
-                "open_service_folder",
-                "open_service_terminal",
+                // Logs
                 "get_service_logs",
                 "clear_service_logs",
-                "get_service_execution_history",
-                "export_service_logs",
-                "get_k6_lab_snapshot",
-                "register_k6_script",
-                "save_k6_lab_preferences",
-                "validate_k6_setup",
-                "get_k6_run_snapshot",
-                "start_k6_run",
-                "cancel_k6_run",
+                // Quick actions
+                "open_service_folder",
+                "open_service_terminal",
             ]),
         ),
     )

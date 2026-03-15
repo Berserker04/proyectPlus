@@ -9,6 +9,7 @@
     "build": "npm run check && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
+    "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

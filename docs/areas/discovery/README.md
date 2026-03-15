@@ -24,6 +24,10 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - Mientras no existan procesos supervisados, el orden por `Inicio` usa la fecha de catalogacion persistida como referencia visible del servicio.
 - El dashboard ya filtra por estado, tipo `framework/runtime`, tags y busqueda textual.
 - La vista principal del dashboard ya no expone paneles internos de toolchain, bootstrap o estado de implementacion; solo muestra superficies funcionales del producto.
+- La shell ahora separa `Resumen` y `Servicios`: discovery vive en una navegacion lateral persistente y el catalogo operativo se resuelve en una vista maestro-detalle.
+- El alta manual ya no ocupa una rail permanente; ahora se precarga desde el inspector del servicio y se guarda como override contextual dentro de `Configuracion`.
+- La lista de servicios ahora usa subarboles mas estables y memoizacion por tarjeta para que el polling operativo no vuelva a pintar todo el catalogo cuando un servicio no cambio.
+- Los chips de tipos, etiquetas, filtros y el ordenado visible ahora se recalculan como estado derivado memoizado para sostener fluidez con workspaces medianos o grandes.
 
 ## Checklist local
 - [x] `T1.1.1 | US1.1 |` Definir el modelo de `Workspace` con `rootPath`, nombre visible y timestamps.
@@ -38,10 +42,13 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - [x] `T1.4.1 | US1.4 |` Disenar la vista principal con nombre, ruta, framework, estado, PID, puerto y uptime.
 - [x] `T1.4.2 | US1.4 |` Implementar orden por nombre, estado, puerto, RAM, CPU y fecha de inicio.
 - [x] `T1.4.3 | US1.4 |` Implementar filtros por estado, tipo de servicio, tags y busqueda textual.
+- [x] `T1.4.4 | US1.4 |` Estabilizar la pantalla de servicios con subarboles mas estables, memoizacion y refresco contextual sin degradar el SLA visual.
 
 ## Cambios no previstos incorporados
+- `SC-005`: se estabilizo el catalogo desktop para que filtros, seleccion e inspector convivan con polling operativo sin re-render masivo del listado.
 - `SC-001`: se agrego un bootstrap tecnico del repo porque el proyecto partio sin scaffolding ejecutable. La shell inicial permite avanzar discovery y plataforma en paralelo sin bloquear el orden funcional.
 - `SC-003`: se limpio la vista principal para retirar paneles internos de progreso y dejar solo copy operativo orientado al usuario final.
+- `SC-004`: se rediseño la experiencia de discovery para integrarla en una shell modular con resumen ejecutivo, sidebar persistente y catalogo maestro-detalle alineado al PRD.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

@@ -1,0 +1,6 @@
+[[permission]]
+identifier = "allow-select-directory"
+description = "Enables the select_directory command."
+commands.allow = [
+  "select_directory",
+]

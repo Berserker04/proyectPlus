@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-microservice"
+description = "Enables the create_microservice command without any pre-configured scope."
+commands.allow = ["create_microservice"]
+
+[[permission]]
+identifier = "deny-create-microservice"
+description = "Denies the create_microservice command without any pre-configured scope."
+commands.deny = ["create_microservice"]

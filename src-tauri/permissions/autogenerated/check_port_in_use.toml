@@ -1,0 +1,6 @@
+[[permission]]
+identifier = "allow-check-port-in-use"
+description = "Enables the check_port_in_use command."
+commands.allow = [
+  "check_port_in_use",
+]
