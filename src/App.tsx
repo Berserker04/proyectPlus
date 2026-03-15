@@ -748,6 +748,8 @@ export default function App() {
                   onLogs={() => { setFocusedServiceId(svc.id); setView("logs"); }}
                   onFolder={() => void openServiceFolder(svc.id).catch((e: unknown) => addToast("error", String(e)))}
                   onTerminal={() => void openServiceTerminal(svc.id).catch((e: unknown) => addToast("error", String(e)))}
+                  onMoveUp={() => void handleMoveService(svc.id, -1)}
+                  onMoveDown={() => void handleMoveService(svc.id, 1)}
                   isDragged={svc.id === draggedServiceId}
                   onDragStart={(e) => handleDragStart(e, svc.id)}
                   onDragOver={handleDragOver}
