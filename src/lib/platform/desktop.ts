@@ -2,6 +2,7 @@ import type {
   AppSettings,
   DashboardSnapshot,
   MicroserviceDraft,
+  ProjectTopology,
   ProjectDraft,
   RunServiceResponse,
   ServiceActionResponse,
@@ -43,6 +44,25 @@ export async function saveAppSettings(settings: AppSettings): Promise<AppSetting
     return settings;
   }
   return invokeDesktop<AppSettings>("save_app_settings", { settings });
+}
+
+export async function getProjectTopology(projectId: string): Promise<ProjectTopology> {
+  if (!isTauriRuntime()) {
+    return {
+      projectId,
+      nodeLayouts: {},
+      edges: [],
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  return invokeDesktop<ProjectTopology>("get_project_topology", { projectId });
+}
+
+export async function saveProjectTopology(topology: ProjectTopology): Promise<ProjectTopology> {
+  if (!isTauriRuntime()) {
+    return topology;
+  }
+  return invokeDesktop<ProjectTopology>("save_project_topology", { topology });
 }
 
 export async function openDirectoryDialog(): Promise<string | null> {

@@ -4,8 +4,8 @@ mod storage;
 use tauri::{AppHandle, RunEvent};
 
 use models::{
-    AppSettings, DashboardSnapshot, MicroserviceDraft, ProjectDraft, RunServiceResponse,
-    ServiceActionResponse, ServiceLogSnapshot,
+    AppSettings, DashboardSnapshot, MicroserviceDraft, ProjectDraft, ProjectTopology,
+    RunServiceResponse, ServiceActionResponse, ServiceLogSnapshot,
 };
 
 // ---------------------------------------------------------------------------
@@ -25,6 +25,16 @@ fn get_app_settings(app: AppHandle) -> Result<AppSettings, String> {
 #[tauri::command]
 fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, String> {
     storage::save_app_settings(&app, settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_project_topology(app: AppHandle, project_id: String) -> Result<ProjectTopology, String> {
+    storage::get_project_topology(&app, &project_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_project_topology(app: AppHandle, topology: ProjectTopology) -> Result<ProjectTopology, String> {
+    storage::save_project_topology(&app, topology).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +168,8 @@ pub fn run() {
             get_catalog_snapshot,
             get_app_settings,
             save_app_settings,
+            get_project_topology,
+            save_project_topology,
             create_project,
             update_project,
             delete_project,

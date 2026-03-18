@@ -26,6 +26,10 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - La telemetria del dashboard ahora se sirve desde una cache por ciclo de refresh para evitar repetir `PowerShell`, GPU y probes de puerto cuando el snapshot sigue fresco.
 - Logs e historial del inspector ya se cargan y refrescan solo en la pestana visible, y el autoscroll continuo usa bottom-lock inmediato para no encadenar animaciones.
 
+- La UI principal ahora renderiza observabilidad dentro de nodos React Flow: el estado visual combina status, CPU y RAM en una sola senal de presion por nodo.
+- El inspector derecho concentra `Logs`, y reserva `Events`, `k6` y `Alerts` como superficies placeholder ya conectadas al nodo seleccionado.
+- Los edges manuales ya tienen contrato visual para `rps`, latencia y error rate, pero mientras no exista backend de red permanecen en modo neutro sin trafico real.
+
 ## Checklist local
 - [x] `T3.1.1 | US3.1 |` Recolectar CPU y RAM por proceso y totales del sistema.
 - [x] `T3.1.2 | US3.1 |` Resolver puertos en escucha y uptime por servicio.
@@ -42,6 +46,8 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 ## Cambios no previstos incorporados
 - `SC-005`: se estabilizo la observabilidad desktop con cache de telemetria y polling contextual por pestana sin cambiar contratos IPC.
 - `SC-004`: se rearmo la experiencia de observabilidad para separar salud global e inspeccion por servicio sin introducir nuevos contratos backend.
+
+- `SC-008`: observabilidad ahora vive en un canvas React Flow con nodos de telemetria viva, logs en la rail derecha y edges preparados para telemetria futura.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

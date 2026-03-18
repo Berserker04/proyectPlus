@@ -379,3 +379,24 @@ Dependencias:
 
 Trazabilidad:
 - Roadmap: `SC-007`
+
+### [x] SC-008 - Migracion a canvas React Flow
+Objetivo: Reemplazar la lista central por un canvas topologico editable, mantener la telemetria viva por nodo y mover la inspeccion/logs a una rail lateral persistente.
+
+Estado actual:
+- La shell principal ya usa canvas React Flow.
+- Los nodos soportan `service` y `worker` como variantes visuales del mismo runtime base.
+- La topologia manual por proyecto queda persistida y el inspector derecho concentra logs vivos y placeholders de `events`, `k6` y `alerts`.
+
+Criterios de aceptacion:
+- El canvas carga y persiste posicion de nodos y edges manuales por proyecto.
+- Las acciones operativas principales viven tanto en el nodo como en el inspector derecho.
+- Los logs del servicio seleccionado siguen llegando en tiempo real dentro del inspector.
+
+Dependencias:
+- `US2.1`
+- `US3.3`
+- `US5.2`
+
+Trazabilidad:
+- Roadmap: `SC-008`

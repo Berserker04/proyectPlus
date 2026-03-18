@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -7,21 +8,27 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import type { Connection, Edge, Node, NodeChange } from "@xyflow/react";
 import type {
   AppSettings,
   DashboardSnapshot,
   Microservice,
   Project,
+  ProjectTopology,
   ServiceLogSnapshot,
+  ServiceNodeLayout,
 } from "@/lib/domain/models";
 import {
   checkPortInUse,
   clearServiceLogs,
   createMicroservice,
   createProject,
-  deleteProject,
   deleteMicroservice,
+  deleteProject,
+  getProjectTopology,
   getServiceLogs,
+  listenDashboardUpdates,
+  listenServiceLogLine,
   loadAppSettings,
   loadDashboardSnapshot,
   openDirectoryDialog,
@@ -30,81 +37,86 @@ import {
   restartService,
   runService,
   saveAppSettings,
+  saveProjectTopology,
   selectProject,
   stopService,
   updateMicroservice,
   updateProject,
-  updateServiceOrder,
-  listenDashboardUpdates,
-  listenServiceLogLine,
   type UnlistenFn,
 } from "@/lib/platform/desktop";
-
-// Components
-import { ToastContainer, type ToastMessage } from "@/components/ToastContainer";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
-import { ServicesView } from "@/components/ServicesView";
-import { LogsView } from "@/components/LogsView";
-import { SettingsView } from "@/components/SettingsView";
 import { ProjectForm } from "@/components/ProjectForm";
 import { ServiceForm, emptyServiceForm, type ServiceFormState } from "@/components/ServiceForm";
+import { SettingsView } from "@/components/SettingsView";
+import { ToastContainer, type ToastMessage } from "@/components/ToastContainer";
+import { ServiceGraphView } from "@/components/ServiceGraphView";
+import { ServiceInspector } from "@/components/ServiceInspector";
+import type { ServiceFlowEdgeData } from "@/components/ServiceFlowEdge";
+import type { ServiceGraphNodeData } from "@/components/ServiceGraphNode";
+import { Modal } from "@/components/Modal";
+import { buildPressureTelemetry } from "@/lib/ui/serviceGraph";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+type AppView = "graph" | "settings";
+type InspectorTab = "logs" | "events" | "k6" | "alerts";
 
-type AppView = "services" | "logs" | "settings";
+const DEFAULT_NODE_WIDTH = 330;
+const DEFAULT_NODE_HEIGHT = 248;
 
-// ---------------------------------------------------------------------------
-// App
-// ---------------------------------------------------------------------------
+function emptySnapshot(): DashboardSnapshot {
+  return {
+    projects: [],
+    services: [],
+    system: { cpuTotalPercent: 0, memoryUsedBytes: 0, memoryTotalBytes: 0, lastRefreshAt: "" },
+  };
+}
+
+function emptyTopology(projectId: string | null): ProjectTopology | null {
+  if (!projectId) return null;
+  return {
+    projectId,
+    nodeLayouts: {},
+    edges: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function buildDefaultLayout(index: number): ServiceNodeLayout {
+  const column = index % 3;
+  const row = Math.floor(index / 3);
+  return {
+    x: 64 + column * 380,
+    y: 72 + row * 290,
+    width: DEFAULT_NODE_WIDTH,
+    height: DEFAULT_NODE_HEIGHT,
+    collapsed: false,
+  };
+}
 
 export default function App() {
   const isDesktop = Boolean(window.__TAURI_INTERNALS__);
   const logViewportRef = useRef<HTMLDivElement | null>(null);
+  const topologySaveTimerRef = useRef<number | null>(null);
 
-  // Core state
-  const [snapshot, setSnapshot] = useState<DashboardSnapshot>({
-    projects: [],
-    services: [],
-    system: { cpuTotalPercent: 0, memoryUsedBytes: 0, memoryTotalBytes: 0, lastRefreshAt: "" },
-  });
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
+  const [topology, setTopology] = useState<ProjectTopology | null>(null);
+  const [isTopologyDirty, setIsTopologyDirty] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     dashboardRefreshSeconds: 2,
     realtimeRefreshSeconds: 1,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isPendingAction, setIsPendingAction] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const addToast = useCallback((tone: ToastMessage["tone"], message: string, detail?: string | null) => {
-    const id = Date.now().toString() + Math.random().toString(36).substring(2);
-    setToasts((prev) => [...prev, { id, tone, message, detail }]);
-    setTimeout(() => removeToast(id), 5000);
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)));
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 300);
-  }, []);
-
-  const [portWarning, setPortWarning] = useState<string | null>(null);
-
-  // Drag and drop state
-  const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null);
-
-  // UI state
-  const [view, setView] = useState<AppView>("services");
+  const [view, setView] = useState<AppView>("graph");
   const [focusedServiceId, setFocusedServiceId] = useState<string | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("logs");
+
   const [logSnapshot, setLogSnapshot] = useState<ServiceLogSnapshot | null>(null);
   const [isLogAutoscroll, setIsLogAutoscroll] = useState(true);
   const [logQuery, setLogQuery] = useState("");
   const deferredLogQuery = useDeferredValue(logQuery);
   const [logFilter, setLogFilter] = useState<"all" | "stdout" | "stderr">("all");
-  const [isPendingAction, setIsPendingAction] = useState(false);
 
-  // Forms
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [projectName, setProjectName] = useState("");
@@ -112,192 +124,457 @@ export default function App() {
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [editingService, setEditingService] = useState<Microservice | null>(null);
   const [serviceForm, setServiceForm] = useState<ServiceFormState>(emptyServiceForm);
+  const [portWarning, setPortWarning] = useState<string | null>(null);
 
-  // Settings form
   const [settingsForm, setSettingsForm] = useState({ dashboardRefresh: "2", realtimeRefresh: "1" });
+  const [serviceToDelete, setServiceToDelete] = useState<Microservice | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
-  // ---------------------------------------------------------------------------
-  // Derived state
-  // ---------------------------------------------------------------------------
+  const addToast = useCallback((tone: ToastMessage["tone"], message: string, detail?: string | null) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setToasts((prev) => [...prev, { id, tone, message, detail }]);
+    window.setTimeout(() => {
+      setToasts((prev) => prev.map((toast) => (toast.id === id ? { ...toast, exiting: true } : toast)));
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((toast) => toast.id !== id));
+      }, 280);
+    }, 5000);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.map((toast) => (toast.id === id ? { ...toast, exiting: true } : toast)));
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    }, 280);
+  }, []);
 
   const activeProject = useMemo(
-    () => snapshot.projects.find((p) => p.isActive) ?? null,
+    () => snapshot.projects.find((project) => project.isActive) ?? null,
     [snapshot.projects],
   );
 
-  const visibleLogEntries = useMemo(() => {
-    const entries = logSnapshot?.entries ?? [];
-    const q = deferredLogQuery.trim().toLowerCase();
-    if (!q) return entries;
-    return entries.filter((e) => e.message.toLowerCase().includes(q));
-  }, [logSnapshot?.entries, deferredLogQuery]);
+  const focusedService = useMemo(
+    () => snapshot.services.find((service) => service.id === focusedServiceId) ?? null,
+    [focusedServiceId, snapshot.services],
+  );
 
   const activeProjectStats = useMemo(() => {
     let running = 0;
     let errors = 0;
-    for (const s of snapshot.services) {
-      if (s.status === "running" || s.status === "starting" || s.status === "external") running++;
-      if (s.status === "error") errors++;
+    for (const service of snapshot.services) {
+      if (service.status === "running" || service.status === "starting" || service.status === "external") running += 1;
+      if (service.status === "error") errors += 1;
     }
     return { total: snapshot.services.length, running, errors };
   }, [snapshot.services]);
 
-  // ---------------------------------------------------------------------------
-  // Effects
-  // ---------------------------------------------------------------------------
+  const visibleLogEntries = useMemo(() => {
+    const entries = logSnapshot?.entries ?? [];
+    const query = deferredLogQuery.trim().toLowerCase();
+    if (!query) return entries;
+    return entries.filter((entry) => entry.message.toLowerCase().includes(query));
+  }, [deferredLogQuery, logSnapshot?.entries]);
+
+  const serviceNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const service of snapshot.services) map.set(service.id, service.name);
+    return map;
+  }, [snapshot.services]);
+
+  const loadLogsForService = useCallback(async (serviceId: string) => {
+    try {
+      const next = await getServiceLogs(serviceId);
+      setLogSnapshot(next);
+    } catch (error) {
+      addToast("error", "No fue posible cargar los logs.", String(error));
+    }
+  }, [addToast]);
 
   useEffect(() => {
     let ignore = false;
     void Promise.all([loadDashboardSnapshot(), loadAppSettings()])
-      .then(([snap, cfg]) => {
+      .then(([nextSnapshot, nextSettings]) => {
         if (ignore) return;
-        setSnapshot(snap);
-        setSettings(cfg);
+        setSnapshot(nextSnapshot);
+        setSettings(nextSettings);
         setSettingsForm({
-          dashboardRefresh: String(cfg.dashboardRefreshSeconds),
-          realtimeRefresh: String(cfg.realtimeRefreshSeconds),
+          dashboardRefresh: String(nextSettings.dashboardRefreshSeconds),
+          realtimeRefresh: String(nextSettings.realtimeRefreshSeconds),
         });
       })
-      .catch((e: unknown) => { if (!ignore) addToast("error", String(e)); })
-      .finally(() => { if (!ignore) setIsLoading(false); });
-    return () => { ignore = true; };
+      .catch((error: unknown) => {
+        if (!ignore) addToast("error", "No fue posible cargar la app.", String(error));
+      })
+      .finally(() => {
+        if (!ignore) setIsLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [addToast]);
 
   useEffect(() => {
     if (!isDesktop) return;
     let unlisten: UnlistenFn | undefined;
-    listenDashboardUpdates((snap) => {
-      setSnapshot(snap);
-    }).then((u) => {
-      unlisten = u;
+    listenDashboardUpdates((nextSnapshot) => {
+      startTransition(() => {
+        setSnapshot(nextSnapshot);
+      });
+    }).then((callback) => {
+      unlisten = callback;
+    }).catch((error: unknown) => {
+      addToast("error", "No fue posible escuchar el dashboard.", String(error));
     });
     return () => {
       if (unlisten) unlisten();
     };
-  }, [isDesktop]);
+  }, [addToast, isDesktop]);
 
   useEffect(() => {
-    if (snapshot.services.length === 0) { setFocusedServiceId(null); return; }
-    if (!focusedServiceId || !snapshot.services.some((s) => s.id === focusedServiceId)) {
+    if (!activeProject) {
+      setTopology(null);
+      return;
+    }
+    let ignore = false;
+    setTopology(emptyTopology(activeProject.id));
+    void getProjectTopology(activeProject.id)
+      .then((nextTopology) => {
+        if (!ignore) setTopology(nextTopology);
+      })
+      .catch((error) => {
+        if (!ignore) addToast("error", "No fue posible cargar la topologia.", String(error));
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [activeProject?.id, addToast]);
+
+  useEffect(() => {
+    if (snapshot.services.length === 0) {
+      setFocusedServiceId(null);
+      setLogSnapshot(null);
+      return;
+    }
+    if (!focusedServiceId || !snapshot.services.some((service) => service.id === focusedServiceId)) {
       setFocusedServiceId(snapshot.services[0]?.id ?? null);
     }
   }, [focusedServiceId, snapshot.services]);
 
-  const isLogsView = view === "logs";
   useEffect(() => {
-    if (!focusedServiceId || !isLogsView || !isDesktop) return;
+    if (!activeProject || !topology) return;
+    const missingLayouts = snapshot.services.reduce<Record<string, ServiceNodeLayout>>((acc, service, index) => {
+      const layout = topology.nodeLayouts[service.id] ?? service.graph;
+      if (!layout) acc[service.id] = buildDefaultLayout(index);
+      return acc;
+    }, {});
 
-    // Carga inicial del historial de logs
-    void getServiceLogs(focusedServiceId).then((ls) => {
-      setLogSnapshot(ls);
+    if (Object.keys(missingLayouts).length === 0) return;
+    setTopology((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        nodeLayouts: { ...current.nodeLayouts, ...missingLayouts },
+        updatedAt: new Date().toISOString(),
+      };
     });
+    setIsTopologyDirty(true);
+  }, [activeProject, snapshot.services, topology]);
 
-    // Escuchar nuevas líneas en tiempo real
+  useEffect(() => {
+    if (!activeProject || !topology || !isTopologyDirty) return;
+    if (topologySaveTimerRef.current != null) window.clearTimeout(topologySaveTimerRef.current);
+    topologySaveTimerRef.current = window.setTimeout(() => {
+      void saveProjectTopology(topology)
+        .then((saved) => {
+          setTopology(saved);
+          setIsTopologyDirty(false);
+        })
+        .catch((error) => {
+          addToast("error", "No fue posible guardar la topologia.", String(error));
+        });
+    }, 350);
+
+    return () => {
+      if (topologySaveTimerRef.current != null) {
+        window.clearTimeout(topologySaveTimerRef.current);
+        topologySaveTimerRef.current = null;
+      }
+    };
+  }, [activeProject, addToast, isTopologyDirty, topology]);
+
+  useEffect(() => {
+    if (!focusedServiceId || inspectorTab !== "logs" || view !== "graph" || !isDesktop) return;
+    void loadLogsForService(focusedServiceId);
     let unlisten: UnlistenFn | undefined;
     listenServiceLogLine((payload) => {
-      if (payload.serviceId === focusedServiceId) {
-        setLogSnapshot((prev) => {
-          if (!prev || prev.serviceId !== payload.serviceId) return prev;
-          // Mantener sincronía con el límite del backend (2000 entradas)
-          const newEntries = [...prev.entries, payload.entry];
-          return {
-            ...prev,
-            entries: newEntries.slice(-2000),
-          };
-        });
-      }
-    }).then((u) => {
-      unlisten = u;
+      if (payload.serviceId !== focusedServiceId) return;
+      setLogSnapshot((current) => {
+        if (!current || current.serviceId !== payload.serviceId) return current;
+        const entries = [...current.entries, payload.entry].slice(-2000);
+        return { ...current, entries };
+      });
+    }).then((callback) => {
+      unlisten = callback;
+    }).catch((error: unknown) => {
+      addToast("error", "No fue posible escuchar logs en vivo.", String(error));
     });
 
     return () => {
       if (unlisten) unlisten();
     };
-  }, [focusedServiceId, isLogsView, isDesktop]);
+  }, [addToast, focusedServiceId, inspectorTab, isDesktop, loadLogsForService, view]);
 
   useEffect(() => {
-    if (!isLogAutoscroll || !isLogsView || !logSnapshot) return;
-    const vp = logViewportRef.current;
-    if (vp) vp.scrollTop = vp.scrollHeight;
-  }, [isLogAutoscroll, isLogsView, logSnapshot]);
+    if (!isLogAutoscroll || !logSnapshot || inspectorTab !== "logs") return;
+    const viewport = logViewportRef.current;
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+  }, [inspectorTab, isLogAutoscroll, logSnapshot]);
 
-  // ---------------------------------------------------------------------------
-  // Actions — projects
-  // ---------------------------------------------------------------------------
+  const updateTopology = useCallback((updater: (current: ProjectTopology) => ProjectTopology) => {
+    setTopology((current) => {
+      if (!current) return current;
+      const next = updater(current);
+      if (next === current) return current;
+      setIsTopologyDirty(true);
+      return next;
+    });
+  }, []);
 
-  async function handleSubmitProject(e: FormEvent) {
-    e.preventDefault();
+  const handleNodesChange = useCallback((changes: NodeChange<Node<ServiceGraphNodeData>>[]) => {
+    updateTopology((current) => {
+      let changed = false;
+      const nextLayouts = { ...current.nodeLayouts };
+      for (const change of changes) {
+        if (change.type === "position" && change.position) {
+          const existing = nextLayouts[change.id] ?? buildDefaultLayout(0);
+          nextLayouts[change.id] = { ...existing, x: change.position.x, y: change.position.y };
+          changed = true;
+        }
+        if (change.type === "dimensions" && change.dimensions) {
+          const existing = nextLayouts[change.id] ?? buildDefaultLayout(0);
+          nextLayouts[change.id] = {
+            ...existing,
+            width: change.dimensions.width,
+            height: change.dimensions.height,
+          };
+          changed = true;
+        }
+      }
+      return changed ? { ...current, nodeLayouts: nextLayouts, updatedAt: new Date().toISOString() } : current;
+    });
+  }, [updateTopology]);
+
+  const handleConnect = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target || connection.source === connection.target) return;
+    updateTopology((current) => {
+      const alreadyExists = current.edges.some(
+        (edge) => edge.sourceServiceId === connection.source && edge.targetServiceId === connection.target,
+      );
+      if (alreadyExists) return current;
+      return {
+        ...current,
+        edges: [
+          ...current.edges,
+          {
+            id: `${connection.source}-${connection.target}-${Date.now()}`,
+            sourceServiceId: connection.source,
+            targetServiceId: connection.target,
+            label: null,
+            telemetry: null,
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, [updateTopology]);
+
+  const handleDeleteEdges = useCallback((edgeIds: string[]) => {
+    if (edgeIds.length === 0) return;
+    updateTopology((current) => ({
+      ...current,
+      edges: current.edges.filter((edge) => !edgeIds.includes(edge.id)),
+      updatedAt: new Date().toISOString(),
+    }));
+  }, [updateTopology]);
+
+  const handleRenameEdge = useCallback((edgeId: string) => {
+    const existing = topology?.edges.find((item) => item.id === edgeId);
+    if (!existing) return;
+    const nextLabel = window.prompt("Nombre del flujo", existing.label ?? "");
+    if (nextLabel === null) return;
+    updateTopology((current) => ({
+      ...current,
+      edges: current.edges.map((item) => (
+        item.id === edgeId ? { ...item, label: nextLabel.trim() || null } : item
+      )),
+      updatedAt: new Date().toISOString(),
+    }));
+  }, [topology?.edges, updateTopology]);
+
+  const handleRunService = useCallback(async (service: Microservice) => {
+    if (service.expectedPort) {
+      const inUse = await checkPortInUse(service.expectedPort).catch(() => false);
+      if (inUse) addToast("error", `Port ${service.expectedPort} is already in use.`, "The node may fail to start.");
+    }
+    addToast("info", `Starting ${service.name}...`);
+    try {
+      const response = await runService(service.id);
+      setSnapshot(response.snapshot);
+      if (response.issue) addToast("error", response.issue.message, response.issue.detail);
+      else addToast("success", `${service.name} is now supervised.`);
+    } catch (error) {
+      addToast("error", "No fue posible iniciar el nodo.", String(error));
+    }
+  }, [addToast]);
+
+  const handleStopService = useCallback(async (service: Microservice) => {
+    addToast("info", `Stopping ${service.name}...`);
+    try {
+      const response = await stopService(service.id);
+      setSnapshot(response.snapshot);
+      addToast("success", `${service.name} stopped.`);
+    } catch (error) {
+      addToast("error", "No fue posible detener el nodo.", String(error));
+    }
+  }, [addToast]);
+
+  const handleRestartService = useCallback(async (service: Microservice) => {
+    addToast("info", `Restarting ${service.name}...`);
+    try {
+      const response = await restartService(service.id);
+      setSnapshot(response.snapshot);
+      if (response.issue) addToast("error", response.issue.message, response.issue.detail);
+      else addToast("success", `${service.name} restarted.`);
+    } catch (error) {
+      addToast("error", "No fue posible reiniciar el nodo.", String(error));
+    }
+  }, [addToast]);
+
+  const nodes = useMemo<Array<Node<ServiceGraphNodeData>>>(() => (
+    snapshot.services.map((service, index) => {
+      const layout = topology?.nodeLayouts[service.id] ?? service.graph ?? buildDefaultLayout(index);
+      return {
+        id: service.id,
+        type: "serviceNode",
+        position: { x: layout.x, y: layout.y },
+        data: {
+          service,
+          telemetry: buildPressureTelemetry(service),
+          onSelect: (serviceId) => {
+            setFocusedServiceId(serviceId);
+          },
+          onRun: (item) => void handleRunService(item),
+          onStop: (item) => void handleStopService(item),
+          onRestart: (item) => void handleRestartService(item),
+          onLogs: (item) => {
+            setFocusedServiceId(item.id);
+            setInspectorTab("logs");
+            void loadLogsForService(item.id);
+          },
+          onTerminal: (item) => void openServiceTerminal(item.id).catch((error: unknown) => addToast("error", String(error))),
+          onEdit: (item) => openEditService(item),
+          onDelete: (item) => setServiceToDelete(item),
+        },
+        draggable: true,
+        deletable: false,
+        selectable: true,
+      };
+    })
+  ), [addToast, handleRestartService, handleRunService, handleStopService, loadLogsForService, snapshot.services, topology?.nodeLayouts]);
+
+  const edges = useMemo<Array<Edge<ServiceFlowEdgeData>>>(() => (
+    (topology?.edges ?? [])
+      .filter((edge) => serviceNameById.has(edge.sourceServiceId) && serviceNameById.has(edge.targetServiceId))
+      .map((edge) => ({
+        id: edge.id,
+        source: edge.sourceServiceId,
+        target: edge.targetServiceId,
+        type: "serviceEdge",
+        deletable: true,
+        data: {
+          edge,
+          sourceName: serviceNameById.get(edge.sourceServiceId) ?? "Source",
+          targetName: serviceNameById.get(edge.targetServiceId) ?? "Target",
+          onEdit: (item) => handleRenameEdge(item.id),
+          onDelete: (edgeId) => handleDeleteEdges([edgeId]),
+        },
+      }))
+  ), [handleDeleteEdges, handleRenameEdge, serviceNameById, topology?.edges]);
+
+  async function handleSubmitProject(event: FormEvent) {
+    event.preventDefault();
     const name = projectName.trim();
     if (!name) return;
     setIsPendingAction(true);
     try {
-      const next = editingProject
+      const nextSnapshot = editingProject
         ? await updateProject(editingProject.id, { name })
         : await createProject({ name });
-      setSnapshot(next);
+      setSnapshot(nextSnapshot);
       setShowProjectForm(false);
       setEditingProject(null);
       setProjectName("");
-      addToast("success", editingProject ? "Proyecto actualizado." : "Proyecto creado.");
-    } catch (err) {
-      addToast("error", String(err));
+      addToast("success", editingProject ? "Project updated." : "Project created.");
+    } catch (error) {
+      addToast("error", "No fue posible guardar el proyecto.", String(error));
     } finally {
       setIsPendingAction(false);
     }
   }
 
-  function openEditProject(proj: Project) {
-    setEditingProject(proj);
-    setProjectName(proj.name);
+  function openEditProject(project: Project) {
+    setEditingProject(project);
+    setProjectName(project.name);
     setShowProjectForm(true);
   }
 
-  async function handleDeleteProject(proj: Project) {
-    if (!window.confirm(`¿Eliminar el proyecto "${proj.name}"? Se perderán todos sus microservicios.`)) return;
+  async function confirmDeleteProject() {
+    if (!projectToDelete) return;
     setIsPendingAction(true);
     try {
-      const next = await deleteProject(proj.id);
-      setSnapshot(next);
-      addToast("success", `Proyecto "${proj.name}" eliminado.`);
-    } catch (err) {
-      addToast("error", String(err));
+      const nextSnapshot = await deleteProject(projectToDelete.id);
+      setSnapshot(nextSnapshot);
+      addToast("success", `Project "${projectToDelete.name}" deleted.`);
+      setProjectToDelete(null);
+    } catch (error) {
+      addToast("error", "No fue posible eliminar el proyecto.", String(error));
     } finally {
       setIsPendingAction(false);
     }
   }
 
-  async function handleSelectProject(proj: Project) {
-    if (proj.isActive) return;
+  async function handleSelectProject(project: Project) {
+    if (project.isActive) return;
     setIsPendingAction(true);
     try {
-      setSnapshot(await selectProject(proj.id));
-    } catch (err) {
-      addToast("error", String(err));
+      setSnapshot(await selectProject(project.id));
+    } catch (error) {
+      addToast("error", "No fue posible seleccionar el proyecto.", String(error));
     } finally {
       setIsPendingAction(false);
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Actions — microservices
-  // ---------------------------------------------------------------------------
-
-  const checkPortWarning = useCallback(async (portStr: string) => {
-    const port = portStr ? parseInt(portStr, 10) : null;
-    if (!port) { setPortWarning(null); return; }
+  const checkPortWarning = useCallback(async (portRaw: string) => {
+    const port = portRaw ? Number.parseInt(portRaw, 10) : null;
+    if (!port) {
+      setPortWarning(null);
+      return;
+    }
     try {
       const inUse = await checkPortInUse(port);
-      setPortWarning(inUse ? `El puerto ${port} ya está en uso. Podría haber conflictos.` : null);
+      setPortWarning(inUse ? `Port ${port} is already in use.` : null);
     } catch {
       setPortWarning(null);
     }
   }, []);
 
-  async function handleSubmitService(e: FormEvent) {
-    e.preventDefault();
+  async function handleSubmitService(event: FormEvent) {
+    event.preventDefault();
     if (!activeProject) return;
     const draft = {
       projectId: activeProject.id,
+      kind: serviceForm.kind,
       name: serviceForm.name.trim(),
       workingDirectory: serviceForm.workingDirectory.trim(),
       startCommand: serviceForm.startCommand.trim(),
@@ -305,216 +582,130 @@ export default function App() {
     };
     setIsPendingAction(true);
     try {
-      const next = editingService
+      const nextSnapshot = editingService
         ? await updateMicroservice(editingService.id, draft)
         : await createMicroservice(draft);
-      setSnapshot(next);
+      setSnapshot(nextSnapshot);
       setShowServiceForm(false);
       setEditingService(null);
       setServiceForm(emptyServiceForm);
       setPortWarning(null);
-      addToast("success", editingService ? "Microservicio actualizado." : "Microservicio agregado.");
-    } catch (err) {
-      addToast("error", String(err));
+      addToast("success", editingService ? "Node updated." : "Node created.");
+    } catch (error) {
+      addToast("error", "No fue posible guardar el nodo.", String(error));
     } finally {
       setIsPendingAction(false);
     }
   }
 
-  function openEditService(svc: Microservice) {
-    setEditingService(svc);
+  function openEditService(service: Microservice) {
+    setEditingService(service);
     setServiceForm({
-      name: svc.name,
-      workingDirectory: svc.workingDirectory,
-      startCommand: svc.startCommand,
-      expectedPort: svc.expectedPort != null ? String(svc.expectedPort) : "",
+      kind: service.kind,
+      name: service.name,
+      workingDirectory: service.workingDirectory,
+      startCommand: service.startCommand,
+      expectedPort: service.expectedPort != null ? String(service.expectedPort) : "",
     });
     setShowServiceForm(true);
   }
 
-  async function handleDeleteService(svc: Microservice) {
-    if (!window.confirm(`¿Eliminar "${svc.name}"?`)) return;
+  async function confirmDeleteService() {
+    if (!serviceToDelete) return;
     setIsPendingAction(true);
     try {
-      setSnapshot(await deleteMicroservice(svc.id));
-      addToast("success", `"${svc.name}" eliminado.`);
-    } catch (err) {
-      addToast("error", String(err));
+      setSnapshot(await deleteMicroservice(serviceToDelete.id));
+      updateTopology((current) => ({
+        ...current,
+        nodeLayouts: Object.fromEntries(
+          Object.entries(current.nodeLayouts).filter(([serviceId]) => serviceId !== serviceToDelete.id),
+        ),
+        edges: current.edges.filter((edge) => edge.sourceServiceId !== serviceToDelete.id && edge.targetServiceId !== serviceToDelete.id),
+        updatedAt: new Date().toISOString(),
+      }));
+      addToast("success", `Node "${serviceToDelete.name}" deleted.`);
+      setServiceToDelete(null);
+    } catch (error) {
+      addToast("error", "No fue posible eliminar el nodo.", String(error));
     } finally {
       setIsPendingAction(false);
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Drag and drop reordering
-  // ---------------------------------------------------------------------------
-
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
-    setDraggedServiceId(id);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", id);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
-
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
-    e.preventDefault();
-    if (!draggedServiceId || draggedServiceId === targetId || !activeProject) {
-      setDraggedServiceId(null);
-      return;
-    }
-    const newServices = [...snapshot.services];
-    const draggedIndex = newServices.findIndex((s) => s.id === draggedServiceId);
-    const targetIndex = newServices.findIndex((s) => s.id === targetId);
-    if (draggedIndex === -1 || targetIndex === -1) { setDraggedServiceId(null); return; }
-    const [draggedItem] = newServices.splice(draggedIndex, 1);
-    newServices.splice(targetIndex, 0, draggedItem);
-    setSnapshot((prev) => ({ ...prev, services: newServices }));
-    setDraggedServiceId(null);
-    try {
-      const orderIds = newServices.map((s) => s.id);
-      const nextSnapshot = await updateServiceOrder(activeProject.id, orderIds);
-      setSnapshot(nextSnapshot);
-    } catch (err) {
-      addToast("error", "Error al guardar el orden", String(err));
-      loadDashboardSnapshot().then(setSnapshot).catch(console.error);
-    }
-  };
-
-  const handleMoveService = async (svcId: string, direction: -1 | 1) => {
-    if (!activeProject) return;
-    const newServices = [...snapshot.services];
-    const currentIndex = newServices.findIndex((s) => s.id === svcId);
-    if (currentIndex === -1) return;
-    const targetIndex = currentIndex + direction;
-    if (targetIndex < 0 || targetIndex >= newServices.length) return;
-    const temp = newServices[currentIndex];
-    newServices[currentIndex] = newServices[targetIndex];
-    newServices[targetIndex] = temp;
-    setSnapshot((prev) => ({ ...prev, services: newServices }));
-    try {
-      const orderIds = newServices.map((s) => s.id);
-      const nextSnapshot = await updateServiceOrder(activeProject.id, orderIds);
-      setSnapshot(nextSnapshot);
-    } catch (err) {
-      addToast("error", "Error al guardar el orden", String(err));
-      loadDashboardSnapshot().then(setSnapshot).catch(console.error);
-    }
-  };
-
-  const handleRunService = useCallback(async (svc: Microservice) => {
-    if (svc.expectedPort) {
-      const inUse = await checkPortInUse(svc.expectedPort).catch(() => false);
-      if (inUse) addToast("error", `El puerto ${svc.expectedPort} ya está en uso.`, "El servicio podría fallar al iniciar.");
-    }
-    addToast("info", `Iniciando ${svc.name}…`);
-    try {
-      const resp = await runService(svc.id);
-      setSnapshot(resp.snapshot);
-      if (resp.issue) addToast("error", resp.issue.message, resp.issue.detail);
-      else addToast("success", `${svc.name} en supervisión.`);
-    } catch (err) {
-      addToast("error", String(err));
-    }
-  }, [addToast]);
-
-  const handleStopService = useCallback(async (svc: Microservice) => {
-    addToast("info", `Deteniendo ${svc.name}…`);
-    try {
-      const resp = await stopService(svc.id);
-      setSnapshot(resp.snapshot);
-      addToast("success", `${svc.name} detenido.`);
-    } catch (err) {
-      addToast("error", String(err));
-    }
-  }, [addToast]);
-
-  const handleRestartService = useCallback(async (svc: Microservice) => {
-    addToast("info", `Reiniciando ${svc.name}…`);
-    try {
-      const resp = await restartService(svc.id);
-      setSnapshot(resp.snapshot);
-      addToast("info", `${svc.name} reiniciándose.`);
-    } catch (err) {
-      addToast("error", String(err));
-    }
-  }, [addToast]);
+  const handleCopyLogs = useCallback(() => {
+    if (!logSnapshot) return;
+    const text = logSnapshot.entries.map((entry) => `[${entry.timestamp.slice(11, 23)}] [${entry.stream}] ${entry.message}`).join("\n");
+    void navigator.clipboard.writeText(text)
+      .then(() => addToast("success", "Logs copied to clipboard."))
+      .catch((error) => addToast("error", "No fue posible copiar los logs.", String(error)));
+  }, [addToast, logSnapshot]);
 
   const handleClearLogs = useCallback(async () => {
     if (!focusedServiceId) return;
-    const ls = await clearServiceLogs(focusedServiceId);
-    setLogSnapshot(ls);
-  }, [focusedServiceId]);
-
-  const handleCopyLogs = useCallback(() => {
-    if (!logSnapshot) return;
-    const text = logSnapshot.entries.map((e) => `[${e.timestamp.slice(11, 23)}] [${e.stream}] ${e.message}`).join("\n");
-    navigator.clipboard.writeText(text)
-      .then(() => addToast("success", "Logs copiados al portapapeles."))
-      .catch((err) => addToast("error", "Error al copiar logs.", String(err)));
-  }, [logSnapshot, addToast]);
+    try {
+      const next = await clearServiceLogs(focusedServiceId);
+      setLogSnapshot(next);
+    } catch (error) {
+      addToast("error", "No fue posible limpiar los logs.", String(error));
+    }
+  }, [addToast, focusedServiceId]);
 
   const handleRunAll = useCallback(async () => {
-    const stoppable = snapshot.services.filter((s) => s.status === "stopped" || s.status === "error");
-    if (stoppable.length === 0) { addToast("info", "No hay servicios detenidos para iniciar."); return; }
-    addToast("info", `Iniciando ${stoppable.length} servicios...`);
-    for (const svc of stoppable) {
+    const stoppable = snapshot.services.filter((service) => service.status === "stopped" || service.status === "error");
+    if (stoppable.length === 0) {
+      addToast("info", "No nodes are ready to start.");
+      return;
+    }
+    addToast("info", `Starting ${stoppable.length} nodes...`);
+    for (const service of stoppable) {
       try {
-        const resp = await runService(svc.id);
-        setSnapshot(resp.snapshot);
-      } catch (err) {
-        addToast("error", `Error iniciando ${svc.name}`, String(err));
+        const response = await runService(service.id);
+        setSnapshot(response.snapshot);
+      } catch (error) {
+        addToast("error", `Failed to start ${service.name}.`, String(error));
       }
     }
-    addToast("success", "Secuencia de inicio completada.");
-  }, [snapshot.services, addToast]);
+    addToast("success", "Bulk start finished.");
+  }, [addToast, snapshot.services]);
 
   const handleStopAll = useCallback(async () => {
-    const running = snapshot.services.filter((s) => s.status === "running" || s.status === "starting");
-    if (running.length === 0) { addToast("info", "No hay servicios activos para detener."); return; }
-    addToast("info", `Deteniendo ${running.length} servicios...`);
-    for (const svc of running) {
+    const runningServices = snapshot.services.filter((service) => service.status === "running" || service.status === "starting");
+    if (runningServices.length === 0) {
+      addToast("info", "No running nodes to stop.");
+      return;
+    }
+    addToast("info", `Stopping ${runningServices.length} nodes...`);
+    for (const service of runningServices) {
       try {
-        const resp = await stopService(svc.id);
-        setSnapshot(resp.snapshot);
-      } catch (err) {
-        addToast("error", `Error deteniendo ${svc.name}`, String(err));
+        const response = await stopService(service.id);
+        setSnapshot(response.snapshot);
+      } catch (error) {
+        addToast("error", `Failed to stop ${service.name}.`, String(error));
       }
     }
-    addToast("success", "Secuencia de detención completada.");
-  }, [snapshot.services, addToast]);
+    addToast("success", "Bulk stop finished.");
+  }, [addToast, snapshot.services]);
 
-  // ---------------------------------------------------------------------------
-  // Actions — settings
-  // ---------------------------------------------------------------------------
-
-  async function handleSaveSettings(e: FormEvent) {
-    e.preventDefault();
-    const next: AppSettings = {
+  async function handleSaveSettings(event: FormEvent) {
+    event.preventDefault();
+    const nextSettings: AppSettings = {
       dashboardRefreshSeconds: Math.max(1, Number(settingsForm.dashboardRefresh)),
       realtimeRefreshSeconds: Math.max(1, Number(settingsForm.realtimeRefresh)),
     };
     try {
-      const saved = await saveAppSettings(next);
+      const saved = await saveAppSettings(nextSettings);
       setSettings(saved);
-      addToast("success", "Ajustes guardados.");
-    } catch (err) {
-      addToast("error", String(err));
+      addToast("success", "Settings saved.");
+    } catch (error) {
+      addToast("error", "No fue posible guardar los ajustes.", String(error));
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
 
   if (isLoading) {
     return (
       <div className="app-loading">
         <div className="spinner" />
-        <p>Cargando…</p>
+        <p>Loading control center...</p>
       </div>
     );
   }
@@ -528,80 +719,93 @@ export default function App() {
         isPendingAction={isPendingAction}
         currentView={view}
         onViewChange={setView}
-        onSelectProject={(proj) => void handleSelectProject(proj)}
+        onSelectProject={(project) => void handleSelectProject(project)}
         onEditProject={openEditProject}
-        onDeleteProject={(proj) => void handleDeleteProject(proj)}
-        onNewProject={() => { setEditingProject(null); setProjectName(""); setShowProjectForm(true); }}
+        onDeleteProject={(project) => setProjectToDelete(project)}
+        onNewProject={() => {
+          setEditingProject(null);
+          setProjectName("");
+          setShowProjectForm(true);
+        }}
       />
 
       <main className="main-panel">
         <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-        {view === "services" && (
-          <ServicesView
-            services={snapshot.services}
-            activeProject={activeProject}
-            isPendingAction={isPendingAction}
-            focusedServiceId={focusedServiceId}
-            draggedServiceId={draggedServiceId}
-            onFocusService={setFocusedServiceId}
-            onRun={(svc) => void handleRunService(svc)}
-            onStop={(svc) => void handleStopService(svc)}
-            onRestart={(svc) => void handleRestartService(svc)}
-            onEdit={openEditService}
-            onDelete={(svc) => void handleDeleteService(svc)}
-            onLogs={(svc) => { setFocusedServiceId(svc.id); setView("logs"); }}
-            onFolder={(svc) => void openServiceFolder(svc.id).catch((e: unknown) => addToast("error", String(e)))}
-            onTerminal={(svc) => void openServiceTerminal(svc.id).catch((e: unknown) => addToast("error", String(e)))}
-            onMoveUp={(id) => void handleMoveService(id, -1)}
-            onMoveDown={(id) => void handleMoveService(id, 1)}
-            onRunAll={() => void handleRunAll()}
-            onStopAll={() => void handleStopAll()}
-            onAddService={() => { setEditingService(null); setServiceForm(emptyServiceForm); setShowServiceForm(true); }}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDrop={(e, id) => void handleDrop(e, id)}
-            onDragEnd={() => setDraggedServiceId(null)}
-          />
-        )}
+        {view === "graph" ? (
+          <div className="graph-layout">
+            <div className="graph-main">
+              <ServiceGraphView
+                activeProject={activeProject}
+                services={snapshot.services}
+                nodes={nodes}
+                edges={edges}
+                isPendingAction={isPendingAction}
+                onAddService={() => {
+                  setEditingService(null);
+                  setServiceForm(emptyServiceForm);
+                  setShowServiceForm(true);
+                }}
+                onRunAll={() => void handleRunAll()}
+                onStopAll={() => void handleStopAll()}
+                onNodesChange={handleNodesChange}
+                onConnect={handleConnect}
+                onDeleteEdges={handleDeleteEdges}
+                onPaneClick={() => undefined}
+              />
+            </div>
 
-        {view === "logs" && (
-          <LogsView
-            services={snapshot.services}
-            focusedServiceId={focusedServiceId}
-            logSnapshot={logSnapshot}
-            logFilter={logFilter}
-            logQuery={logQuery}
-            isLogAutoscroll={isLogAutoscroll}
-            visibleLogEntries={visibleLogEntries}
-            onFocusService={setFocusedServiceId}
-            onFilterChange={setLogFilter}
-            onQueryChange={setLogQuery}
-            onToggleAutoscroll={() => setIsLogAutoscroll((p) => !p)}
-            onCopyLogs={handleCopyLogs}
-            onClearLogs={() => void handleClearLogs()}
-            logViewportRef={logViewportRef}
-          />
-        )}
-
-        {view === "settings" && (
+            <ServiceInspector
+              service={focusedService}
+              services={snapshot.services}
+              tab={inspectorTab}
+              onTabChange={setInspectorTab}
+              onSelectService={(serviceId) => {
+                setFocusedServiceId(serviceId);
+                if (inspectorTab === "logs") void loadLogsForService(serviceId);
+              }}
+              onRun={(service) => void handleRunService(service)}
+              onStop={(service) => void handleStopService(service)}
+              onRestart={(service) => void handleRestartService(service)}
+              onLogs={(service) => void loadLogsForService(service.id)}
+              onFolder={(service) => void openServiceFolder(service.id).catch((error: unknown) => addToast("error", String(error)))}
+              onTerminal={(service) => void openServiceTerminal(service.id).catch((error: unknown) => addToast("error", String(error)))}
+              onEdit={openEditService}
+              onDelete={(service) => setServiceToDelete(service)}
+              logSnapshot={logSnapshot}
+              logFilter={logFilter}
+              logQuery={logQuery}
+              isLogAutoscroll={isLogAutoscroll}
+              visibleLogEntries={visibleLogEntries}
+              onFilterChange={setLogFilter}
+              onQueryChange={setLogQuery}
+              onToggleAutoscroll={() => setIsLogAutoscroll((current) => !current)}
+              onCopyLogs={handleCopyLogs}
+              onClearLogs={() => void handleClearLogs()}
+              logViewportRef={logViewportRef}
+            />
+          </div>
+        ) : (
           <SettingsView
             settingsForm={settingsForm}
-            onChangeField={(field, value) => setSettingsForm((p) => ({ ...p, [field]: value }))}
-            onSubmit={(e) => void handleSaveSettings(e)}
+            onChangeField={(field, value) => setSettingsForm((current) => ({ ...current, [field]: value }))}
+            onSubmit={(event) => void handleSaveSettings(event)}
           />
         )}
       </main>
 
-      {/* Modals */}
       {showProjectForm && (
         <ProjectForm
           editingProject={editingProject}
           projectName={projectName}
           isPendingAction={isPendingAction}
           onChangeName={setProjectName}
-          onSubmit={(e) => void handleSubmitProject(e)}
-          onClose={() => { setShowProjectForm(false); setEditingProject(null); setProjectName(""); }}
+          onSubmit={(event) => void handleSubmitProject(event)}
+          onClose={() => {
+            setShowProjectForm(false);
+            setEditingProject(null);
+            setProjectName("");
+          }}
         />
       )}
 
@@ -611,19 +815,58 @@ export default function App() {
           serviceForm={serviceForm}
           portWarning={portWarning}
           isPendingAction={isPendingAction}
-          onChangeField={(field, value) => setServiceForm((p) => ({ ...p, [field]: value }))}
+          onChangeField={(field, value) => setServiceForm((current) => ({ ...current, [field]: value }))}
           onPortBlur={(port) => void checkPortWarning(port)}
           onBrowseDirectory={async () => {
             try {
-              const dir = await openDirectoryDialog();
-              if (dir != null) setServiceForm((p) => ({ ...p, workingDirectory: dir }));
-            } catch (err) {
-              addToast("error", String(err));
+              const directory = await openDirectoryDialog();
+              if (directory != null) {
+                setServiceForm((current) => ({ ...current, workingDirectory: directory }));
+              }
+            } catch (error) {
+              addToast("error", "No fue posible abrir el selector de carpetas.", String(error));
             }
           }}
-          onSubmit={(e) => void handleSubmitService(e)}
-          onClose={() => { setShowServiceForm(false); setEditingService(null); setServiceForm(emptyServiceForm); }}
+          onSubmit={(event) => void handleSubmitService(event)}
+          onClose={() => {
+            setShowServiceForm(false);
+            setEditingService(null);
+            setServiceForm(emptyServiceForm);
+            setPortWarning(null);
+          }}
         />
+      )}
+
+      {serviceToDelete && (
+        <Modal title="Delete node" onClose={() => setServiceToDelete(null)}>
+          <div className="modal-confirm">
+            <p>Delete <strong>{serviceToDelete.name}</strong> and remove its graph connections?</p>
+            <div className="modal-actions">
+              <button type="button" className="btn-outline" onClick={() => setServiceToDelete(null)}>
+                Cancel
+              </button>
+              <button type="button" className="btn-primary" onClick={() => void confirmDeleteService()}>
+                Delete node
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {projectToDelete && (
+        <Modal title="Delete project" onClose={() => setProjectToDelete(null)}>
+          <div className="modal-confirm">
+            <p>Delete <strong>{projectToDelete.name}</strong> and all its nodes?</p>
+            <div className="modal-actions">
+              <button type="button" className="btn-outline" onClick={() => setProjectToDelete(null)}>
+                Cancel
+              </button>
+              <button type="button" className="btn-primary" onClick={() => void confirmDeleteProject()}>
+                Delete project
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

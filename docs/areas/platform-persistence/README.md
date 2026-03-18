@@ -42,6 +42,9 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - La shell frontend ya quedo fragmentada en sidebar, resumen, servicios, laboratorio k6 y ajustes, sin introducir routing ni cambiar contratos Tauri o SQLite.
 - La inicializacion de schema SQLite ahora ocurre una sola vez al arrancar la app; `open_connection()` queda como apertura liviana para no penalizar cada comando del polling.
 - La plataforma ahora mantiene caches internos para telemetria del dashboard y para el ultimo reporte k6 parseado, desacoplando rutas caras de persistencia y lectura frecuente.
+- `user_preference` ahora tambien persiste la `project_topology` por proyecto: layout de nodos, dimensiones y edges manuales del canvas React Flow.
+- `microservice` ya incorpora el campo `kind` para diferenciar `service` y `worker` sin abrir un runtime nuevo.
+- La plataforma expone comandos Tauri dedicados para leer y guardar topologia por proyecto, manteniendo el snapshot runtime separado de esa capa visual.
 
 ## Checklist local
 - [x] `T5.1.1 | US5.1 |` Definir esquema SQLite para `Workspace`, `Service`, `ProcessInstance`, `K6Script` y `K6Run`.
@@ -61,6 +64,8 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - [x] `SC-002` Recurso minimo `src-tauri/icons/icon.ico` agregado para destrabar la validacion nativa de Tauri en Windows.
 - [x] `SC-003` Limpieza del snapshot publico y de la UI para remover paneles internos de toolchain/bootstrap y mensajes de avance tecnico.
 - [x] `SC-004` Rediseño integral de la shell UI/UX con una sola identidad visual, navegacion lateral persistente y reorganizacion completa de las superficies frontend sin cambiar persistencia ni backend.
+
+- `SC-008`: la plataforma ahora persiste topologia React Flow por proyecto y extiende el contrato de `microservice` con `kind` y metadata visual.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

@@ -28,6 +28,9 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - El alta manual ya no ocupa una rail permanente; ahora se precarga desde el inspector del servicio y se guarda como override contextual dentro de `Configuracion`.
 - La lista de servicios ahora usa subarboles mas estables y memoizacion por tarjeta para que el polling operativo no vuelva a pintar todo el catalogo cuando un servicio no cambio.
 - Los chips de tipos, etiquetas, filtros y el ordenado visible ahora se recalculan como estado derivado memoizado para sostener fluidez con workspaces medianos o grandes.
+- La shell principal ya migro de cards/lista a un canvas React Flow con posiciones persistidas por proyecto.
+- Discovery ahora entrega nodos con `kind` (`service` o `worker`) y ya no solo una lista ordenable.
+- La topologia manual del proyecto vive por encima del catalogo: las conexiones son editables y se persisten como parte del contexto del proyecto activo.
 
 ## Checklist local
 - [x] `T1.1.1 | US1.1 |` Definir el modelo de `Workspace` con `rootPath`, nombre visible y timestamps.
@@ -49,6 +52,8 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - `SC-001`: se agrego un bootstrap tecnico del repo porque el proyecto partio sin scaffolding ejecutable. La shell inicial permite avanzar discovery y plataforma en paralelo sin bloquear el orden funcional.
 - `SC-003`: se limpio la vista principal para retirar paneles internos de progreso y dejar solo copy operativo orientado al usuario final.
 - `SC-004`: se rediseño la experiencia de discovery para integrarla en una shell modular con resumen ejecutivo, sidebar persistente y catalogo maestro-detalle alineado al PRD.
+
+- `SC-008`: discovery ahora materializa un canvas topologico editable con layout persistido, nodos `service/worker` y edges manuales por proyecto.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

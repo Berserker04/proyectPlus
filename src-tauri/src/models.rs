@@ -1,4 +1,46 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+pub type ServiceKind = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceNodeLayout {
+    pub x: f64,
+    pub y: f64,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
+    #[serde(default)]
+    pub collapsed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeTelemetryViewModel {
+    pub requests_per_second: Option<f64>,
+    pub average_latency_ms: Option<f64>,
+    pub p95_latency_ms: Option<f64>,
+    pub error_rate_percent: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTopologyEdge {
+    pub id: String,
+    pub source_service_id: String,
+    pub target_service_id: String,
+    pub label: Option<String>,
+    pub telemetry: Option<EdgeTelemetryViewModel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTopology {
+    pub project_id: String,
+    pub node_layouts: HashMap<String, ServiceNodeLayout>,
+    pub edges: Vec<ProjectTopologyEdge>,
+    pub updated_at: String,
+}
 
 // ---------------------------------------------------------------------------
 // Core domain
@@ -19,6 +61,7 @@ pub struct Project {
 pub struct Microservice {
     pub id: String,
     pub project_id: String,
+    pub kind: ServiceKind,
     pub name: String,
     pub working_directory: String,
     pub start_command: String,
@@ -31,6 +74,7 @@ pub struct Microservice {
     pub last_signal: String,
     pub issue: Option<ServiceActionIssue>,
     pub port_conflict: bool,
+    pub graph: Option<ServiceNodeLayout>,
     pub sort_order: i64,
     pub created_at: String,
     pub updated_at: String,
@@ -109,6 +153,7 @@ pub struct ProjectDraft {
 #[serde(rename_all = "camelCase")]
 pub struct MicroserviceDraft {
     pub project_id: String,
+    pub kind: ServiceKind,
     pub name: String,
     pub working_directory: String,
     pub start_command: String,

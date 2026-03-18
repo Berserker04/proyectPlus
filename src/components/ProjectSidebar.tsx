@@ -12,94 +12,75 @@ interface ProjectSidebarProps {
   system: SystemMetrics;
   activeProjectStats: ProjectStats;
   isPendingAction: boolean;
-  currentView: "services" | "logs" | "settings";
-  onViewChange: (view: "services" | "logs" | "settings") => void;
-  onSelectProject: (proj: Project) => void;
-  onEditProject: (proj: Project) => void;
-  onDeleteProject: (proj: Project) => void;
+  currentView: "graph" | "settings";
+  onViewChange: (view: "graph" | "settings") => void;
+  onSelectProject: (project: Project) => void;
+  onEditProject: (project: Project) => void;
+  onDeleteProject: (project: Project) => void;
   onNewProject: () => void;
 }
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+  const index = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, index)).toFixed(1)} ${units[index]}`;
 }
 
-function formatPercent(n: number): string {
-  return `${n.toFixed(1)}%`;
+function formatPercent(value: number): string {
+  return `${value.toFixed(1)}%`;
 }
 
-export function ProjectSidebar({
-  projects,
-  system,
-  activeProjectStats,
-  isPendingAction,
-  currentView,
-  onViewChange,
-  onSelectProject,
-  onEditProject,
-  onDeleteProject,
-  onNewProject,
-}: ProjectSidebarProps) {
+export function ProjectSidebar(props: ProjectSidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
         <img src="/logo.png" alt="ProyectsPlus" className="sidebar-logo" />
       </div>
 
-      {/* Nav */}
       <nav className="sidebar-nav">
         <button
-          className={`nav-btn${currentView === "services" ? " active" : ""}`}
-          onClick={() => onViewChange("services")}
+          className={`nav-btn${props.currentView === "graph" ? " active" : ""}`}
+          onClick={() => props.onViewChange("graph")}
         >
-          <span className="nav-icon">⚙</span> Servicios
+          <span className="nav-icon">Flow</span> Topology
         </button>
         <button
-          className={`nav-btn${currentView === "logs" ? " active" : ""}`}
-          onClick={() => onViewChange("logs")}
+          className={`nav-btn${props.currentView === "settings" ? " active" : ""}`}
+          onClick={() => props.onViewChange("settings")}
         >
-          <span className="nav-icon">📄</span> Logs
-        </button>
-        <button
-          className={`nav-btn${currentView === "settings" ? " active" : ""}`}
-          onClick={() => onViewChange("settings")}
-        >
-          <span className="nav-icon">🔧</span> Ajustes
+          <span className="nav-icon">Cfg</span> Settings
         </button>
       </nav>
 
-      {/* Projects */}
-      <div className="sidebar-section-label">Proyectos</div>
+      <div className="sidebar-section-label">Projects</div>
       <div className="project-list">
-        {projects.map((proj) => (
-          <div key={proj.id} className={`project-item${proj.isActive ? " active" : ""}`}>
+        {props.projects.map((project) => (
+          <div key={project.id} className={`project-item${project.isActive ? " active" : ""}`}>
             <button
               className="project-name-btn"
-              onClick={() => onSelectProject(proj)}
-              title={proj.name}
+              onClick={() => props.onSelectProject(project)}
+              title={project.name}
             >
-              {proj.name}
+              {project.name}
             </button>
-            {proj.isActive && activeProjectStats.total > 0 && (
+            {project.isActive && props.activeProjectStats.total > 0 && (
               <div
                 className="project-stats"
-                title={`${activeProjectStats.running} activos, ${activeProjectStats.errors} errores, ${activeProjectStats.total} total`}
+                title={`${props.activeProjectStats.running} active, ${props.activeProjectStats.errors} errors, ${props.activeProjectStats.total} total`}
               >
-                {activeProjectStats.errors > 0 && (
+                {props.activeProjectStats.errors > 0 && (
                   <span className="project-stat-dot" style={{ background: statusColor.error }} />
                 )}
-                {activeProjectStats.running > 0 && activeProjectStats.errors === 0 && (
+                {props.activeProjectStats.running > 0 && props.activeProjectStats.errors === 0 && (
                   <span className="project-stat-dot" style={{ background: statusColor.running }} />
                 )}
-                <span className="project-stat-count">{activeProjectStats.total}</span>
+                <span className="project-stat-count">{props.activeProjectStats.total}</span>
               </div>
             )}
             <div className="project-actions">
-              <button className="icon-btn" title="Editar" onClick={() => onEditProject(proj)}>✏</button>
-              <button className="icon-btn danger" title="Eliminar" onClick={() => onDeleteProject(proj)}>✕</button>
+              <button className="icon-btn" title="Edit" onClick={() => props.onEditProject(project)}>Edit</button>
+              <button className="icon-btn danger" title="Delete" onClick={() => props.onDeleteProject(project)}>Del</button>
             </div>
           </div>
         ))}
@@ -107,22 +88,21 @@ export function ProjectSidebar({
 
       <button
         className="btn-outline sidebar-new-project"
-        onClick={onNewProject}
-        disabled={isPendingAction}
+        onClick={props.onNewProject}
+        disabled={props.isPendingAction}
       >
-        + Nuevo proyecto
+        + New project
       </button>
 
-      {/* System metrics footer */}
       <div className="sidebar-footer">
         <div className="metric-row">
           <span>CPU</span>
-          <span className="metric-value">{formatPercent(system.cpuTotalPercent)}</span>
+          <span className="metric-value">{formatPercent(props.system.cpuTotalPercent)}</span>
         </div>
         <div className="metric-row">
           <span>RAM</span>
           <span className="metric-value">
-            {formatBytes(system.memoryUsedBytes)} / {formatBytes(system.memoryTotalBytes)}
+            {formatBytes(props.system.memoryUsedBytes)} / {formatBytes(props.system.memoryTotalBytes)}
           </span>
         </div>
       </div>

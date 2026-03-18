@@ -150,5 +150,6 @@ Definition of done:
 - [x] `SC-003 | discovery, platform-persistence |` Remover del producto y del snapshot publico los paneles internos de toolchain/bootstrap y el copy de avance tecnico, dejando solo informacion funcional y operativa en dashboard, settings y laboratorio k6.
 - [x] `SC-004 | discovery, operations, observability, k6-lab, platform-persistence |` Redisenar integralmente la shell UI/UX con estetica dark premium, navegacion lateral persistente, resumen ejecutivo, vista maestro-detalle de servicios, laboratorio k6 dedicado y una sola identidad visual firma manteniendo los contratos backend existentes.
 - [x] `SC-005 | discovery, observability, k6-lab, platform-persistence |` Pasada profesional de estabilizacion de rendimiento desktop: cache de telemetria y reportes, polling contextual por vista y reutilizacion de subarboles/charts para sostener fluidez sin bajar la cadencia de refresh.
+- [x] `SC-008 | discovery, operations, observability, platform-persistence |` Migrar la shell principal a React Flow con canvas persistido por proyecto, nodos `service/worker`, edges manuales y un inspector lateral derecho con logs vivos y tabs placeholder para eventos, k6 y alertas.
 - Plantilla de registro:
   - [ ] `SC-001 | area |` Descripcion del cambio detectado, razon, impacto en historias y docs afectados.

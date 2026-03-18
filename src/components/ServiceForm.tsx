@@ -3,6 +3,7 @@ import type { Microservice } from "@/lib/domain/models";
 import { Modal } from "./Modal";
 
 export type ServiceFormState = {
+  kind: "service" | "worker";
   name: string;
   workingDirectory: string;
   startCommand: string;
@@ -10,6 +11,7 @@ export type ServiceFormState = {
 };
 
 export const emptyServiceForm: ServiceFormState = {
+  kind: "service",
   name: "",
   workingDirectory: "",
   startCommand: "",
@@ -45,6 +47,17 @@ export function ServiceForm({
       onClose={onClose}
     >
       <form onSubmit={onSubmit}>
+        <div className="field-group">
+          <label className="field-label">Tipo</label>
+          <select
+            className="field-input"
+            value={serviceForm.kind}
+            onChange={(e) => onChangeField("kind", e.target.value as ServiceFormState["kind"])}
+          >
+            <option value="service">Microservice</option>
+            <option value="worker">Worker</option>
+          </select>
+        </div>
         <div className="field-group">
           <label className="field-label">Nombre</label>
           <input

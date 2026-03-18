@@ -6,15 +6,14 @@
 
 use crate::models::{
     AppSettings, DashboardSnapshot, Microservice, MicroserviceDraft, Project, ProjectDraft,
-    RunServiceResponse, ServiceActionIssue, ServiceActionResponse,
-    ServiceLogEntry, ServiceLogLineEvent, ServiceLogSnapshot,
-    SystemMetrics,
+    ProjectTopology, ServiceNodeLayout, SystemMetrics,
 };
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use sysinfo::System;
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
+use std::collections::{HashMap, HashSet};
 
 use super::events::RefreshConfig;
 use super::runtime::{get_live_status, stop_service, RuntimeSupervisor, TelemetryCache};
@@ -25,6 +24,8 @@ use super::runtime::{get_live_status, stop_service, RuntimeSupervisor, Telemetry
 
 const SETTINGS_SCOPE: &str = "global";
 const SETTINGS_KEY: &str = "app_settings";
+const TOPOLOGY_SCOPE: &str = "project";
+const TOPOLOGY_KEY: &str = "project_topology";
 
 static SCHEMA_SQL: &str = "
 PRAGMA foreign_keys = ON;
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS project (
 CREATE TABLE IF NOT EXISTS microservice (
   id TEXT PRIMARY KEY NOT NULL,
   project_id TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'service',
   name TEXT NOT NULL,
   working_directory TEXT NOT NULL,
   start_command TEXT NOT NULL DEFAULT '',
@@ -83,6 +85,10 @@ pub fn initialize_database(app: &AppHandle) -> Result<(), String> {
         "ALTER TABLE microservice ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
         [],
     );
+    let _ = conn.execute(
+        "ALTER TABLE microservice ADD COLUMN kind TEXT NOT NULL DEFAULT 'service'",
+        [],
+    );
     Ok(())
 }
 
@@ -110,15 +116,108 @@ fn load_projects(conn: &Connection) -> Result<Vec<Project>, String> {
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+fn normalize_kind(raw: &str) -> String {
+    if raw.trim().eq_ignore_ascii_case("worker") {
+        "worker".to_string()
+    } else {
+        "service".to_string()
+    }
+}
+
+fn default_project_topology(project_id: &str) -> ProjectTopology {
+    ProjectTopology {
+        project_id: project_id.to_string(),
+        node_layouts: HashMap::new(),
+        edges: Vec::new(),
+        updated_at: Utc::now().to_rfc3339(),
+    }
+}
+
+fn load_project_service_ids(conn: &Connection, project_id: &str) -> Result<HashSet<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id FROM microservice WHERE project_id = ?1")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![project_id], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    let ids = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(ids.into_iter().collect())
+}
+
+fn sanitize_project_topology(
+    project_id: &str,
+    service_ids: &HashSet<String>,
+    mut topology: ProjectTopology,
+) -> ProjectTopology {
+    topology.project_id = project_id.to_string();
+    topology.node_layouts.retain(|service_id, _| service_ids.contains(service_id));
+    topology.edges.retain(|edge| {
+        edge.source_service_id != edge.target_service_id
+            && service_ids.contains(&edge.source_service_id)
+            && service_ids.contains(&edge.target_service_id)
+    });
+    for edge in topology.edges.iter_mut() {
+        edge.label = edge
+            .label
+            .as_ref()
+            .map(|label| label.trim().to_string())
+            .filter(|label| !label.is_empty());
+    }
+    topology.updated_at = Utc::now().to_rfc3339();
+    topology
+}
+
+fn get_project_topology_from_conn(conn: &Connection, project_id: &str) -> Result<ProjectTopology, String> {
+    let service_ids = load_project_service_ids(conn, project_id)?;
+    let stored: rusqlite::Result<String> = conn.query_row(
+        "SELECT value_json FROM user_preference WHERE key = ?1 AND scope_type = ?2 AND scope_id = ?3",
+        params![TOPOLOGY_KEY, TOPOLOGY_SCOPE, project_id],
+        |row| row.get(0),
+    );
+
+    let topology = match stored {
+        Ok(json) => serde_json::from_str::<ProjectTopology>(&json)
+            .map_err(|e| format!("parse topology: {e}"))?,
+        Err(rusqlite::Error::QueryReturnedNoRows) => default_project_topology(project_id),
+        Err(e) => return Err(e.to_string()),
+    };
+
+    Ok(sanitize_project_topology(project_id, &service_ids, topology))
+}
+
+fn save_project_topology_to_conn(
+    conn: &Connection,
+    project_id: &str,
+    topology: ProjectTopology,
+) -> Result<ProjectTopology, String> {
+    let service_ids = load_project_service_ids(conn, project_id)?;
+    let sanitized = sanitize_project_topology(project_id, &service_ids, topology);
+    let json = serde_json::to_string(&sanitized).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT OR REPLACE INTO user_preference (key, scope_type, scope_id, value_json, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            TOPOLOGY_KEY,
+            TOPOLOGY_SCOPE,
+            project_id,
+            json,
+            sanitized.updated_at
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(sanitized)
+}
+
 fn load_services_for_project(
     conn: &Connection,
     project_id: &str,
     supervisor: &RuntimeSupervisor,
     sys: &System,
+    node_layouts: &HashMap<String, ServiceNodeLayout>,
 ) -> Result<Vec<Microservice>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_id, name, working_directory, start_command, expected_port,
+            "SELECT id, project_id, kind, name, working_directory, start_command, expected_port,
                     sort_order, created_at, updated_at
              FROM microservice
              WHERE project_id = ?1
@@ -131,26 +230,29 @@ fn load_services_for_project(
             Ok((
                 row.get::<_, String>(0)?,       // id
                 row.get::<_, String>(1)?,       // project_id
-                row.get::<_, String>(2)?,       // name
-                row.get::<_, String>(3)?,       // working_directory
-                row.get::<_, String>(4)?,       // start_command
-                row.get::<_, Option<i64>>(5)?,  // expected_port
-                row.get::<_, i64>(6)?,          // sort_order
-                row.get::<_, String>(7)?,       // created_at
-                row.get::<_, String>(8)?,       // updated_at
+                row.get::<_, String>(2)?,       // kind
+                row.get::<_, String>(3)?,       // name
+                row.get::<_, String>(4)?,       // working_directory
+                row.get::<_, String>(5)?,       // start_command
+                row.get::<_, Option<i64>>(6)?,  // expected_port
+                row.get::<_, i64>(7)?,          // sort_order
+                row.get::<_, String>(8)?,       // created_at
+                row.get::<_, String>(9)?,       // updated_at
             ))
         })
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for row in rows {
-        let (id, proj_id, name, wd, cmd, port, order, created, updated) =
+        let (id, proj_id, kind, name, wd, cmd, port, order, created, updated) =
             row.map_err(|e| e.to_string())?;
         let expected_port = port.map(|p| p as u16);
         let live = get_live_status(&id, expected_port, supervisor, sys);
         result.push(Microservice {
+            graph: node_layouts.get(&id).cloned(),
             id,
             project_id: proj_id,
+            kind: normalize_kind(&kind),
             name,
             working_directory: wd,
             start_command: cmd,
@@ -198,8 +300,9 @@ pub(crate) fn build_snapshot(app: &AppHandle) -> Result<DashboardSnapshot, Strin
     let active_id = projects.iter().find(|p| p.is_active).map(|p| p.id.clone());
 
     let services = if let Some(id) = active_id {
+        let topology = get_project_topology_from_conn(&conn, &id)?;
         let sys = cache.system.lock().unwrap();
-        load_services_for_project(&conn, &id, &supervisor, &sys)?
+        load_services_for_project(&conn, &id, &supervisor, &sys, &topology.node_layouts)?
     } else {
         vec![]
     };
@@ -251,6 +354,20 @@ pub fn save_app_settings(app: &AppHandle, settings: AppSettings) -> Result<AppSe
     }
 
     Ok(settings)
+}
+
+pub fn get_project_topology(app: &AppHandle, project_id: &str) -> Result<ProjectTopology, String> {
+    let conn = open_db(app)?;
+    get_project_topology_from_conn(&conn, project_id)
+}
+
+pub fn save_project_topology(
+    app: &AppHandle,
+    topology: ProjectTopology,
+) -> Result<ProjectTopology, String> {
+    let conn = open_db(app)?;
+    let project_id = topology.project_id.clone();
+    save_project_topology_to_conn(&conn, &project_id, topology)
 }
 
 fn default_settings() -> AppSettings {
@@ -364,11 +481,12 @@ pub fn create_microservice(
         .unwrap_or(0);
     conn.execute(
         "INSERT INTO microservice
-         (id, project_id, name, working_directory, start_command, expected_port, sort_order, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+         (id, project_id, kind, name, working_directory, start_command, expected_port, sort_order, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             id,
             draft.project_id,
+            normalize_kind(&draft.kind),
             draft.name.trim(),
             draft.working_directory.trim(),
             draft.start_command.trim(),
@@ -391,9 +509,10 @@ pub fn update_microservice(
     let now = Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE microservice
-         SET name=?1, working_directory=?2, start_command=?3, expected_port=?4, updated_at=?5
-         WHERE id=?6",
+         SET kind=?1, name=?2, working_directory=?3, start_command=?4, expected_port=?5, updated_at=?6
+         WHERE id=?7",
         params![
+            normalize_kind(&draft.kind),
             draft.name.trim(),
             draft.working_directory.trim(),
             draft.start_command.trim(),
