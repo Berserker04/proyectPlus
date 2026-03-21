@@ -33,7 +33,10 @@ fn get_project_topology(app: AppHandle, project_id: String) -> Result<ProjectTop
 }
 
 #[tauri::command]
-fn save_project_topology(app: AppHandle, topology: ProjectTopology) -> Result<ProjectTopology, String> {
+fn save_project_topology(
+    app: AppHandle,
+    topology: ProjectTopology,
+) -> Result<ProjectTopology, String> {
     storage::save_project_topology(&app, topology).map_err(|e| e.to_string())
 }
 
@@ -92,7 +95,11 @@ fn delete_microservice(app: AppHandle, service_id: String) -> Result<DashboardSn
 }
 
 #[tauri::command]
-fn update_service_order(app: AppHandle, project_id: String, service_ids: Vec<String>) -> Result<DashboardSnapshot, String> {
+fn update_service_order(
+    app: AppHandle,
+    project_id: String,
+    service_ids: Vec<String>,
+) -> Result<DashboardSnapshot, String> {
     storage::update_service_order(&app, &project_id, service_ids).map_err(|e| e.to_string())
 }
 

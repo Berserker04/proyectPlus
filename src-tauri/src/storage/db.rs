@@ -10,10 +10,10 @@ use crate::models::{
 };
 use chrono::Utc;
 use rusqlite::{params, Connection};
+use std::collections::{HashMap, HashSet};
 use sysinfo::System;
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
-use std::collections::{HashMap, HashSet};
 
 use super::events::RefreshConfig;
 use super::runtime::{get_live_status, stop_service, RuntimeSupervisor, TelemetryCache};
@@ -113,7 +113,8 @@ fn load_projects(conn: &Connection) -> Result<Vec<Project>, String> {
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 fn normalize_kind(raw: &str) -> String {
@@ -133,14 +134,19 @@ fn default_project_topology(project_id: &str) -> ProjectTopology {
     }
 }
 
-fn load_project_service_ids(conn: &Connection, project_id: &str) -> Result<HashSet<String>, String> {
+fn load_project_service_ids(
+    conn: &Connection,
+    project_id: &str,
+) -> Result<HashSet<String>, String> {
     let mut stmt = conn
         .prepare("SELECT id FROM microservice WHERE project_id = ?1")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map(params![project_id], |row| row.get::<_, String>(0))
         .map_err(|e| e.to_string())?;
-    let ids = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    let ids = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
     Ok(ids.into_iter().collect())
 }
 
@@ -150,7 +156,9 @@ fn sanitize_project_topology(
     mut topology: ProjectTopology,
 ) -> ProjectTopology {
     topology.project_id = project_id.to_string();
-    topology.node_layouts.retain(|service_id, _| service_ids.contains(service_id));
+    topology
+        .node_layouts
+        .retain(|service_id, _| service_ids.contains(service_id));
     topology.edges.retain(|edge| {
         edge.source_service_id != edge.target_service_id
             && service_ids.contains(&edge.source_service_id)
@@ -167,7 +175,10 @@ fn sanitize_project_topology(
     topology
 }
 
-fn get_project_topology_from_conn(conn: &Connection, project_id: &str) -> Result<ProjectTopology, String> {
+fn get_project_topology_from_conn(
+    conn: &Connection,
+    project_id: &str,
+) -> Result<ProjectTopology, String> {
     let service_ids = load_project_service_ids(conn, project_id)?;
     let stored: rusqlite::Result<String> = conn.query_row(
         "SELECT value_json FROM user_preference WHERE key = ?1 AND scope_type = ?2 AND scope_id = ?3",
@@ -182,7 +193,11 @@ fn get_project_topology_from_conn(conn: &Connection, project_id: &str) -> Result
         Err(e) => return Err(e.to_string()),
     };
 
-    Ok(sanitize_project_topology(project_id, &service_ids, topology))
+    Ok(sanitize_project_topology(
+        project_id,
+        &service_ids,
+        topology,
+    ))
 }
 
 fn save_project_topology_to_conn(
@@ -228,16 +243,16 @@ fn load_services_for_project(
     let rows = stmt
         .query_map(params![project_id], |row| {
             Ok((
-                row.get::<_, String>(0)?,       // id
-                row.get::<_, String>(1)?,       // project_id
-                row.get::<_, String>(2)?,       // kind
-                row.get::<_, String>(3)?,       // name
-                row.get::<_, String>(4)?,       // working_directory
-                row.get::<_, String>(5)?,       // start_command
-                row.get::<_, Option<i64>>(6)?,  // expected_port
-                row.get::<_, i64>(7)?,          // sort_order
-                row.get::<_, String>(8)?,       // created_at
-                row.get::<_, String>(9)?,       // updated_at
+                row.get::<_, String>(0)?,      // id
+                row.get::<_, String>(1)?,      // project_id
+                row.get::<_, String>(2)?,      // kind
+                row.get::<_, String>(3)?,      // name
+                row.get::<_, String>(4)?,      // working_directory
+                row.get::<_, String>(5)?,      // start_command
+                row.get::<_, Option<i64>>(6)?, // expected_port
+                row.get::<_, i64>(7)?,         // sort_order
+                row.get::<_, String>(8)?,      // created_at
+                row.get::<_, String>(9)?,      // updated_at
             ))
         })
         .map_err(|e| e.to_string())?;
@@ -330,8 +345,9 @@ pub fn get_app_settings(app: &AppHandle) -> Result<AppSettings, String> {
         |row| row.get(0),
     );
     match result {
-        Ok(json) => serde_json::from_str::<AppSettings>(&json)
-            .map_err(|e| format!("parse settings: {e}")),
+        Ok(json) => {
+            serde_json::from_str::<AppSettings>(&json).map_err(|e| format!("parse settings: {e}"))
+        }
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(default_settings()),
         Err(e) => Err(e.to_string()),
     }
@@ -525,14 +541,14 @@ pub fn update_microservice(
     build_snapshot(app)
 }
 
-pub fn delete_microservice(
-    app: &AppHandle,
-    service_id: &str,
-) -> Result<DashboardSnapshot, String> {
+pub fn delete_microservice(app: &AppHandle, service_id: &str) -> Result<DashboardSnapshot, String> {
     let _ = stop_service(app, service_id);
     let conn = open_db(app)?;
-    conn.execute("DELETE FROM microservice WHERE id = ?1", params![service_id])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM microservice WHERE id = ?1",
+        params![service_id],
+    )
+    .map_err(|e| e.to_string())?;
     build_snapshot(app)
 }
 

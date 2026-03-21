@@ -35,6 +35,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - La linea temporal de conexion y el edge final ahora usan flecha y geometria flotante: el preview sale del borde mas cercano, conserva el tono visual del flujo y muestra estado valido/invalido durante el gesto.
 - Los refreshes de telemetria ya no reemplazan el estado interactivo del canvas; React Flow conserva localmente `dragging` y `selected` mientras el dashboard rehidrata solo los datos operativos del nodo.
 - El rail derecho de logs ahora mantiene el overflow encapsulado dentro de su viewport, hace wrap seguro de lineas largas y permite resize horizontal manual; el ancho elegido queda recordado localmente para no obligar al usuario a reajustarlo en cada sesion.
+- La captura de logs ahora sanea secuencias ANSI/CSI/OSC, retornos de carro inline y otros controles de terminal antes de guardar el buffer y emitir eventos en vivo, para que la UI muestre texto limpio equivalente a una consola real.
 
 ## Checklist local
 - [x] `T3.1.1 | US3.1 |` Recolectar CPU y RAM por proceso y totales del sistema.
@@ -58,6 +59,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-010`: observabilidad endurecio la seleccion del canvas para que el rail derecho, el highlight del nodo y los labels de edges no pierdan contexto por drag o paneos accidentales.
 - `SC-011`: observabilidad compacto el switcher del inspector derecho en dos selects por tipo para que el rail de logs no pierda espacio util al crecer el grafo.
 - `SC-012`: la rail derecha encapsula el scroll de logs y ahora se puede expandir o encoger manualmente para diagnostico sin que las lineas largas rompan el layout.
+- `SC-013`: los logs en vivo ahora eliminan secuencias ANSI y otros controles de terminal antes de renderizarse, evitando basura visual al capturar salidas coloreadas como `nest start --watch`.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

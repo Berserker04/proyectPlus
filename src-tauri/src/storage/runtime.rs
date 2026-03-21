@@ -10,14 +10,16 @@
 // ---------------------------------------------------------------------------
 
 use crate::models::{
-    RunServiceResponse, ServiceActionIssue, ServiceActionResponse,
-    ServiceLogEntry, ServiceLogLineEvent, ServiceLogSnapshot,
+    RunServiceResponse, ServiceActionIssue, ServiceActionResponse, ServiceLogEntry,
+    ServiceLogLineEvent, ServiceLogSnapshot,
 };
 use chrono::Utc;
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader},
+    iter::Peekable,
     process::{Child, Command, Stdio},
+    str::Chars,
     sync::{Arc, Mutex},
     thread,
 };
@@ -52,6 +54,9 @@ pub(crate) struct LogBuffer {
 
 impl LogBuffer {
     pub fn append(&mut self, stream: &str, message: String) {
+        let Some(message) = sanitize_log_message(&message) else {
+            return;
+        };
         self.sequence += 1;
         if self.entries.len() >= MAX_LOG_ENTRIES {
             self.entries.remove(0);
@@ -173,6 +178,73 @@ fn emit_log_line(app: &AppHandle, service_id: &str, entry: ServiceLogEntry) {
             entry,
         },
     );
+}
+
+fn sanitize_log_message(raw: &str) -> Option<String> {
+    if raw.is_empty() {
+        return Some(String::new());
+    }
+
+    let mut sanitized = String::with_capacity(raw.len());
+    let mut chars = raw.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\u{1b}' => skip_escape_sequence(&mut chars),
+            '\r' => sanitized.clear(),
+            '\u{8}' => {
+                sanitized.pop();
+            }
+            '\t' => sanitized.push('\t'),
+            c if c.is_control() => {}
+            c => sanitized.push(c),
+        }
+    }
+
+    if sanitized.is_empty() {
+        None
+    } else {
+        Some(sanitized)
+    }
+}
+
+fn skip_escape_sequence(chars: &mut Peekable<Chars<'_>>) {
+    match chars.next() {
+        Some('[') => skip_csi(chars),
+        Some(']') => skip_osc(chars),
+        Some('P' | 'X' | '^' | '_') => skip_st(chars),
+        Some(_) | None => {}
+    }
+}
+
+fn skip_csi(chars: &mut Peekable<Chars<'_>>) {
+    for ch in chars.by_ref() {
+        if ('@'..='~').contains(&ch) {
+            break;
+        }
+    }
+}
+
+fn skip_osc(chars: &mut Peekable<Chars<'_>>) {
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\u{7}' => break,
+            '\u{1b}' if matches!(chars.peek(), Some('\\')) => {
+                chars.next();
+                break;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn skip_st(chars: &mut Peekable<Chars<'_>>) {
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' && matches!(chars.peek(), Some('\\')) {
+            chars.next();
+            break;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -343,10 +415,7 @@ pub fn get_service_logs(app: &AppHandle, service_id: &str) -> Result<ServiceLogS
     })
 }
 
-pub fn clear_service_logs(
-    app: &AppHandle,
-    service_id: &str,
-) -> Result<ServiceLogSnapshot, String> {
+pub fn clear_service_logs(app: &AppHandle, service_id: &str) -> Result<ServiceLogSnapshot, String> {
     let supervisor = app.state::<RuntimeSupervisor>();
     let procs = supervisor.processes.lock().unwrap();
     if let Some(entry) = procs.get(service_id) {
@@ -420,4 +489,31 @@ fn split_command(cmd: &str) -> (String, Vec<String>) {
     }
     let prog = parts.remove(0);
     (prog, parts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_log_message;
+
+    #[test]
+    fn strips_ansi_sequences_from_log_lines() {
+        let raw = "\u{1b}[2J\u{1b}[3J\u{1b}[H[\u{1b}[90m3:45:28 p. m.\u{1b}[0m] Starting compilation in watch mode...";
+        assert_eq!(
+            sanitize_log_message(raw),
+            Some("[3:45:28 p. m.] Starting compilation in watch mode...".to_string())
+        );
+    }
+
+    #[test]
+    fn drops_lines_that_only_contain_terminal_control_sequences() {
+        assert_eq!(sanitize_log_message("\u{1b}[2J\u{1b}[3J\u{1b}[H"), None);
+    }
+
+    #[test]
+    fn resets_line_on_carriage_return_and_applies_backspace() {
+        assert_eq!(
+            sanitize_log_message("booting\rready\u{8}!"),
+            Some("read!".to_string())
+        );
+    }
 }
