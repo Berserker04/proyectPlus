@@ -154,5 +154,6 @@ Definition of done:
 - [x] `SC-009 | discovery, operations, observability, platform-persistence |` Estabilizar el canvas topologico React Flow: drag confiable por header, seleccion consistente de nodos, conexiones manuales funcionales, acciones secundarias movidas al inspector y permisos Tauri alineados para topologia y eventos en vivo.
 - [x] `SC-010 | discovery, operations, observability, platform-persistence |` Completar el hardening del canvas React Flow: `focusedServiceId` como fuente de verdad para la seleccion visual, `dragHandle` real en el header, acciones runtime y labels blindados con `nodrag`/`nopan`, y contexto del inspector estable aunque el usuario haga click en el pane.
 - [x] `SC-011 | discovery, operations, observability |` Compactar el switcher del inspector derecho en dos selects (`microservices` y `workers`) para evitar que la rail pierda espacio util cuando el proyecto crece.
+- [x] `SC-012 | observability, ui |` Hacer que la rail derecha de inspeccion no desborde logs: viewport con scroll contenido, wrapping robusto para lineas largas y resize manual horizontal del panel para expandir o encoger el area de lectura segun el diagnostico.
 - Plantilla de registro:
   - [ ] `SC-001 | area |` Descripcion del cambio detectado, razon, impacto en historias y docs afectados.

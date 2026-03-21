@@ -34,6 +34,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - El highlight del nodo y el inspector ahora comparten `focusedServiceId` como unica fuente de verdad, asi que logs y contexto visual se mantienen alineados incluso si el usuario hace click en el fondo del canvas.
 - La linea temporal de conexion y el edge final ahora usan flecha y geometria flotante: el preview sale del borde mas cercano, conserva el tono visual del flujo y muestra estado valido/invalido durante el gesto.
 - Los refreshes de telemetria ya no reemplazan el estado interactivo del canvas; React Flow conserva localmente `dragging` y `selected` mientras el dashboard rehidrata solo los datos operativos del nodo.
+- El rail derecho de logs ahora mantiene el overflow encapsulado dentro de su viewport, hace wrap seguro de lineas largas y permite resize horizontal manual; el ancho elegido queda recordado localmente para no obligar al usuario a reajustarlo en cada sesion.
 
 ## Checklist local
 - [x] `T3.1.1 | US3.1 |` Recolectar CPU y RAM por proceso y totales del sistema.
@@ -56,6 +57,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-009`: se corrigio la escucha de logs en vivo y la seleccion de nodos para que el inspector derecho mantenga contexto sin romper la interaccion del canvas.
 - `SC-010`: observabilidad endurecio la seleccion del canvas para que el rail derecho, el highlight del nodo y los labels de edges no pierdan contexto por drag o paneos accidentales.
 - `SC-011`: observabilidad compacto el switcher del inspector derecho en dos selects por tipo para que el rail de logs no pierda espacio util al crecer el grafo.
+- `SC-012`: la rail derecha encapsula el scroll de logs y ahora se puede expandir o encoger manualmente para diagnostico sin que las lineas largas rompan el layout.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

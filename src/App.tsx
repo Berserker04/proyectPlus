@@ -6,7 +6,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { applyNodeChanges, type Connection, type Edge, type Node, type NodeChange } from "@xyflow/react";
 import type {
@@ -61,6 +64,15 @@ type InspectorTab = "logs" | "events" | "k6" | "alerts";
 
 const DEFAULT_NODE_WIDTH = 330;
 const DEFAULT_NODE_HEIGHT = 216;
+const DEFAULT_INSPECTOR_WIDTH = 392;
+const MIN_INSPECTOR_WIDTH = 320;
+const MIN_GRAPH_WIDTH = 420;
+const INSPECTOR_WIDTH_STORAGE_KEY = "mscc.inspector.width";
+
+function clampInspectorWidth(width: number, containerWidth: number) {
+  const maxWidth = Math.max(MIN_INSPECTOR_WIDTH, containerWidth - MIN_GRAPH_WIDTH);
+  return Math.min(Math.max(width, MIN_INSPECTOR_WIDTH), maxWidth);
+}
 
 function emptySnapshot(): DashboardSnapshot {
   return {
@@ -128,6 +140,7 @@ function buildGraphNode(args: {
 export default function App() {
   const isDesktop = Boolean(window.__TAURI_INTERNALS__);
   const logViewportRef = useRef<HTMLDivElement | null>(null);
+  const graphLayoutRef = useRef<HTMLDivElement | null>(null);
   const topologySaveTimerRef = useRef<number | null>(null);
 
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
@@ -144,6 +157,12 @@ export default function App() {
   const [view, setView] = useState<AppView>("graph");
   const [focusedServiceId, setFocusedServiceId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("logs");
+  const [inspectorWidth, setInspectorWidth] = useState(() => {
+    const stored = window.localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY);
+    const parsed = stored ? Number.parseInt(stored, 10) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : DEFAULT_INSPECTOR_WIDTH;
+  });
+  const [isInspectorResizing, setIsInspectorResizing] = useState(false);
 
   const [logSnapshot, setLogSnapshot] = useState<ServiceLogSnapshot | null>(null);
   const [isLogAutoscroll, setIsLogAutoscroll] = useState(true);
@@ -224,6 +243,60 @@ export default function App() {
     }
   }, [addToast]);
 
+  const syncInspectorWidth = useCallback((nextWidth?: number) => {
+    const layout = graphLayoutRef.current;
+    if (!layout) return;
+    const { width } = layout.getBoundingClientRect();
+    setInspectorWidth((current) => clampInspectorWidth(nextWidth ?? current, width));
+  }, []);
+
+  const resizeInspectorBy = useCallback((delta: number) => {
+    const layout = graphLayoutRef.current;
+    if (!layout) return;
+    const { width } = layout.getBoundingClientRect();
+    setInspectorWidth((current) => clampInspectorWidth(current + delta, width));
+  }, []);
+
+  const updateInspectorWidthFromPointer = useCallback((clientX: number) => {
+    const layout = graphLayoutRef.current;
+    if (!layout) return;
+    const bounds = layout.getBoundingClientRect();
+    syncInspectorWidth(bounds.right - clientX);
+  }, [syncInspectorWidth]);
+
+  const handleInspectorResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (window.matchMedia("(max-width: 1200px)").matches) return;
+    event.preventDefault();
+    setIsInspectorResizing(true);
+    updateInspectorWidthFromPointer(event.clientX);
+  }, [updateInspectorWidthFromPointer]);
+
+  const handleInspectorResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      resizeInspectorBy(24);
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      resizeInspectorBy(-24);
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      syncInspectorWidth(MIN_INSPECTOR_WIDTH);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      syncInspectorWidth(DEFAULT_INSPECTOR_WIDTH);
+    }
+  }, [resizeInspectorBy, syncInspectorWidth]);
+
+  const resetInspectorWidth = useCallback(() => {
+    syncInspectorWidth(DEFAULT_INSPECTOR_WIDTH);
+  }, [syncInspectorWidth]);
+
   useEffect(() => {
     let ignore = false;
     void Promise.all([loadDashboardSnapshot(), loadAppSettings()])
@@ -246,6 +319,13 @@ export default function App() {
       ignore = true;
     };
   }, [addToast]);
+
+  useEffect(() => {
+    syncInspectorWidth();
+    const handleWindowResize = () => syncInspectorWidth();
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, [syncInspectorWidth]);
 
   useEffect(() => {
     if (!isDesktop) return;
@@ -363,6 +443,42 @@ export default function App() {
     const viewport = logViewportRef.current;
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [inspectorTab, isLogAutoscroll, logSnapshot]);
+
+  useEffect(() => {
+    if (!isInspectorResizing) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      updateInspectorWidthFromPointer(event.clientX);
+    };
+    const stopResizing = () => {
+      setIsInspectorResizing(false);
+    };
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+    };
+  }, [isInspectorResizing, updateInspectorWidthFromPointer]);
+
+  useEffect(() => {
+    window.localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(inspectorWidth));
+  }, [inspectorWidth]);
+
+  const graphLayoutStyle = useMemo(() => (
+    { "--inspector-width": `${inspectorWidth}px` } as CSSProperties
+  ), [inspectorWidth]);
 
   const updateTopology = useCallback((updater: (current: ProjectTopology) => ProjectTopology) => {
     setTopology((current) => {
@@ -768,7 +884,11 @@ export default function App() {
         <ToastContainer toasts={toasts} onRemove={removeToast} />
 
         {view === "graph" ? (
-          <div className="graph-layout">
+          <div
+            ref={graphLayoutRef}
+            className={`graph-layout${isInspectorResizing ? " is-resizing" : ""}`}
+            style={graphLayoutStyle}
+          >
             <div className="graph-main">
               <ServiceGraphView
                 activeProject={activeProject}
@@ -790,6 +910,19 @@ export default function App() {
                 onPaneClick={() => undefined}
               />
             </div>
+
+            <div
+              className="inspector-resize-handle"
+              role="separator"
+              aria-label="Resize logs panel"
+              aria-orientation="vertical"
+              aria-valuemin={MIN_INSPECTOR_WIDTH}
+              aria-valuenow={inspectorWidth}
+              tabIndex={0}
+              onPointerDown={handleInspectorResizeStart}
+              onDoubleClick={resetInspectorWidth}
+              onKeyDown={handleInspectorResizeKeyDown}
+            />
 
             <ServiceInspector
               service={focusedService}
