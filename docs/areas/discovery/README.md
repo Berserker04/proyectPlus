@@ -31,6 +31,11 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - La shell principal ya migro de cards/lista a un canvas React Flow con posiciones persistidas por proyecto.
 - Discovery ahora entrega nodos con `kind` (`service` o `worker`) y ya no solo una lista ordenable.
 - La topologia manual del proyecto vive por encima del catalogo: las conexiones son editables y se persisten como parte del contexto del proyecto activo.
+- La interaccion primaria del canvas ahora separa seleccion y movimiento: el nodo se selecciona desde React Flow y se arrastra desde el header para evitar pans accidentales del lienzo.
+- El foco visible del canvas ahora nace de `focusedServiceId`: seleccionar un nodo actualiza el inspector, hacer click en el pane conserva el ultimo contexto y el drag solo vive en un grip visible dentro del header.
+- El switcher del inspector derecho ya no enumera todos los nodos como chips: ahora separa `microservices` y `workers` en dos selects compactos para preservar espacio util en proyectos grandes.
+- Cada nodo ahora expone un `easy-connect` sobre toda la tarjeta; el grip del header sigue siendo el unico punto de drag y las conexiones flotan desde la cara mas cercana del nodo en vez de quedar fijas izquierda/derecha.
+- El canvas mantiene un estado local de nodos para React Flow; los refreshes de dashboard solo hidratan telemetria y metadata, sin reinicializar el estado transitorio del drag.
 
 ## Checklist local
 - [x] `T1.1.1 | US1.1 |` Definir el modelo de `Workspace` con `rootPath`, nombre visible y timestamps.
@@ -54,6 +59,9 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - `SC-004`: se rediseño la experiencia de discovery para integrarla en una shell modular con resumen ejecutivo, sidebar persistente y catalogo maestro-detalle alineado al PRD.
 
 - `SC-008`: discovery ahora materializa un canvas topologico editable con layout persistido, nodos `service/worker` y edges manuales por proyecto.
+- `SC-009`: el canvas topologico se estabilizo con drag handle dedicado, seleccion consistente de nodos y conexiones manuales mas confiables.
+- `SC-010`: discovery termino de endurecer el canvas usando `focusedServiceId` como fuente de verdad, `dragHandle` explicito en un grip visible del nodo y superficies interactivas protegidas con `nodrag` y `nopan`.
+- `SC-011`: discovery compacto el switcher del inspector derecho en dos selects por tipo de nodo para que la rail escale mejor cuando aumenta el catalogo.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

@@ -4,7 +4,15 @@ description = "Permite leer el snapshot del dashboard, settings y logs desde la 
 permissions = [
   "allow-get-catalog-snapshot",
   "allow-get-app-settings",
+  "allow-get-project-topology",
   "allow-get-service-logs",
+]
+
+[[set]]
+identifier = "topology-write"
+description = "Permite persistir el layout y las conexiones del canvas topologico."
+permissions = [
+  "allow-save-project-topology",
 ]
 
 [[set]]
@@ -53,8 +61,10 @@ identifier = "desktop-main"
 description = "Capability agregada de la ventana principal para el MVP local de MS Control Center."
 permissions = [
   "catalog-read",
+  "topology-write",
   "project-management",
   "microservice-management",
   "service-runtime",
   "settings-write",
+  "core:event:default",
 ]

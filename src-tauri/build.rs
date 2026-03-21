@@ -10,6 +10,8 @@ fn main() {
                 "get_catalog_snapshot",
                 "get_app_settings",
                 "save_app_settings",
+                "get_project_topology",
+                "save_project_topology",
                 // Projects
                 "create_project",
                 "update_project",
@@ -29,6 +31,8 @@ fn main() {
                 // Quick actions
                 "open_service_folder",
                 "open_service_terminal",
+                "select_directory",
+                "check_port_in_use",
             ]),
         ),
     )

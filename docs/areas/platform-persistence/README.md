@@ -45,6 +45,8 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - `user_preference` ahora tambien persiste la `project_topology` por proyecto: layout de nodos, dimensiones y edges manuales del canvas React Flow.
 - `microservice` ya incorpora el campo `kind` para diferenciar `service` y `worker` sin abrir un runtime nuevo.
 - La plataforma expone comandos Tauri dedicados para leer y guardar topologia por proyecto, manteniendo el snapshot runtime separado de esa capa visual.
+- La capability `default` de desktop ahora referencia el set `desktop-main` y vuelve a incluir permisos para topologia (`get/save_project_topology`) y eventos core (`core:event:default`) necesarios para logs y refresh reactivos.
+- `SC-010` no abre nuevos contratos backend: la topologia y permisos existentes se mantienen, mientras el frontend endurece la interaccion usando `focusedServiceId` como fuente de verdad del canvas.
 
 ## Checklist local
 - [x] `T5.1.1 | US5.1 |` Definir esquema SQLite para `Workspace`, `Service`, `ProcessInstance`, `K6Script` y `K6Run`.
@@ -66,6 +68,8 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - [x] `SC-004` Rediseño integral de la shell UI/UX con una sola identidad visual, navegacion lateral persistente y reorganizacion completa de las superficies frontend sin cambiar persistencia ni backend.
 
 - `SC-008`: la plataforma ahora persiste topologia React Flow por proyecto y extiende el contrato de `microservice` con `kind` y metadata visual.
+- `SC-009`: se alinearon build manifest, permissions y capabilities para exponer topologia y eventos en vivo sin errores `not allowed` en la shell desktop.
+- `SC-010`: no hubo cambios de schema ni de IPC; la plataforma sostiene el mismo contrato de topologia mientras el frontend completa el hardening de seleccion y drag en el canvas.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

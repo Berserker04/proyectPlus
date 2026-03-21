@@ -7,24 +7,6 @@
     "main"
   ],
   "permissions": [
-    "allow-get-catalog-snapshot",
-    "allow-get-app-settings",
-    "allow-save-app-settings",
-    "allow-create-project",
-    "allow-update-project",
-    "allow-delete-project",
-    "allow-select-project",
-    "allow-create-microservice",
-    "allow-update-microservice",
-    "allow-delete-microservice",
-    "allow-run-service",
-    "allow-stop-service",
-    "allow-restart-service",
-    "allow-get-service-logs",
-    "allow-clear-service-logs",
-    "allow-open-service-folder",
-    "allow-open-service-terminal",
-    "allow-select-directory",
-    "allow-update-service-order"
+    "desktop-main"
   ]
 }

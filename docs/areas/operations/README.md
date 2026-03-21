@@ -28,6 +28,10 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - Los accesos rapidos operativos (`detener`, `reiniciar`, carpeta, terminal, copiar puerto/comando`) quedaron visibles tanto en la lista como en el inspector para reducir cambios de contexto.
 - La operacion principal ahora sucede sobre nodos React Flow: `Run`, `Stop`, `Restart`, logs, shell y edicion viven tanto en el nodo como en el inspector derecho.
 - Los edges manuales del canvas no alteran todavia el runtime; en esta iteracion solo modelan relaciones visuales y contexto operativo por proyecto.
+- Tras la estabilizacion del canvas, el nodo quedo reducido a acciones runtime (`Start`, `Stop`, `Restart`) y las acciones secundarias permanecen solo en el inspector para no competir con drag ni conexiones.
+- Las acciones runtime embebidas ahora reafirman el foco del inspector antes de ejecutar `Start`, `Stop` o `Restart`, evitando clicks perdidos y arrastres accidentales sobre el nodo.
+- El overlay de conexion ahora cubre toda la tarjeta del nodo, pero el grip de drag y los botones runtime quedan aislados por encima para que conectar, mover y operar no compitan entre si.
+- La conmutacion entre nodos desde el inspector ya se resuelve con dos selects por tipo (`microservices` y `workers`), manteniendo las acciones runtime ligadas al foco actual sin llenar la rail de botones.
 
 ## Checklist local
 - [x] `T2.1.1 | US2.1 |` Modelar la accion `Run` con feedback inmediato y estado `starting`.
@@ -45,6 +49,9 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - `SC-007`: se mejoró la UX sustancialmente, agregando controles bulk a nivel de proyecto (run all / stop all), notificaciones en toasts, validación de puertos ocupados mediante Tauri, filtros de logs, y reordenamiento del UI persistido en base de datos.
 
 - `SC-008`: operaciones ya no se disparan desde tarjetas; ahora viven en un canvas React Flow con nodos `service/worker` y un inspector lateral persistente.
+- `SC-009`: las interacciones del canvas quedaron separadas por intencion: drag desde el header, seleccion fiable por click y acciones operativas secundarias solo en la rail derecha.
+- `SC-010`: operaciones termino de blindar botones y labels del canvas con `nodrag` y `nopan`, y alinea el foco del inspector con cualquier accion runtime disparada desde el nodo.
+- `SC-011`: operaciones compacto el switcher del inspector derecho con selects por tipo para sostener la escalabilidad visual del rail sin cambiar los contratos runtime.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

@@ -400,3 +400,41 @@ Dependencias:
 
 Trazabilidad:
 - Roadmap: `SC-008`
+
+### [x] SC-009 - Estabilizacion del canvas topologico
+Objetivo: Corregir la interaccion real del canvas para que seleccionar, arrastrar, conectar y persistir nodos funcione de forma confiable en desktop.
+
+Estado actual:
+- El drag principal del nodo ahora vive en el header y ya no compite con el pane drag del canvas.
+- Los nodos del canvas conservan solo `Start`, `Stop` y `Restart`; el resto de acciones quedan en el inspector derecho.
+- La topologia vuelve a guardarse y los logs en vivo pueden escucharse porque la capability Tauri ya expone comandos y eventos requeridos.
+
+Criterios de aceptacion:
+- El usuario puede seleccionar un nodo y ver su inspector derecho sin perder interaccion del canvas.
+- El usuario puede arrastrar nodos y conectar handles de forma consistente.
+- Cambiar a `Flow Topology` no muestra errores de permisos para guardar topologia ni escuchar logs vivos.
+
+Dependencias:
+- `SC-008`
+
+Trazabilidad:
+- Roadmap: `SC-009`
+
+### [x] SC-010 - Hardening final de interacciones del canvas
+Objetivo: Cerrar los huecos remanentes de UX del canvas para que el foco del inspector, la seleccion visual y las acciones embebidas compartan la misma fuente de verdad.
+
+Estado actual:
+- `focusedServiceId` ahora gobierna tanto el highlight del nodo como el contexto del inspector derecho.
+- El drag del nodo queda restringido al header real mediante `dragHandle`, y botones o labels interactivos usan `nodrag` y `nopan`.
+- Las acciones `Start`, `Stop` y `Restart` dentro del nodo enfocan primero el servicio antes de ejecutar el runtime.
+
+Criterios de aceptacion:
+- Click en el cuerpo del nodo actualiza el inspector y mantiene el highlight correcto.
+- Click en el fondo del canvas no limpia el ultimo contexto del inspector.
+- Labels de edges y acciones runtime se pueden usar sin arrastres o paneos accidentales.
+
+Dependencias:
+- `SC-009`
+
+Trazabilidad:
+- Roadmap: `SC-010`

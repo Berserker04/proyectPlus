@@ -5,6 +5,15 @@ import type {
   ServiceStatus,
 } from "@/lib/domain/models";
 
+export type EdgeTone = "idle" | "healthy" | "warning" | "critical";
+
+const EDGE_TONE_COLORS: Record<EdgeTone, string> = {
+  idle: "#5d7ca5",
+  healthy: "#41f0a9",
+  warning: "#f7c14d",
+  critical: "#ff627d",
+};
+
 export function formatBytes(bytes: number): string {
   if (bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -90,7 +99,7 @@ export function formatEdgeTelemetry(telemetry?: EdgeTelemetryViewModel | null) {
       requests: "No traffic data",
       latency: "Latency pending",
       errors: "Error rate pending",
-      tone: "idle" as const,
+      tone: "idle" as EdgeTone,
     };
   }
 
@@ -106,11 +115,15 @@ export function formatEdgeTelemetry(telemetry?: EdgeTelemetryViewModel | null) {
     ? `${telemetry.errorRatePercent.toFixed(1)}% errors`
     : "Error rate pending";
 
-  let tone: "idle" | "healthy" | "warning" | "critical" = "healthy";
+  let tone: EdgeTone = "healthy";
   if ((telemetry.errorRatePercent ?? 0) >= 3) tone = "critical";
   else if ((telemetry.p95LatencyMs ?? 0) >= 800) tone = "critical";
   else if ((telemetry.errorRatePercent ?? 0) > 0.5 || (telemetry.p95LatencyMs ?? 0) >= 300) tone = "warning";
   else if ((telemetry.requestsPerSecond ?? 0) <= 0) tone = "idle";
 
   return { requests, latency, errors, tone };
+}
+
+export function getEdgeToneColor(tone: EdgeTone): string {
+  return EDGE_TONE_COLORS[tone];
 }

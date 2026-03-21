@@ -1,6 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
 [[permission]]
 identifier = "allow-check-port-in-use"
-description = "Enables the check_port_in_use command."
-commands.allow = [
-  "check_port_in_use",
-]
+description = "Enables the check_port_in_use command without any pre-configured scope."
+commands.allow = ["check_port_in_use"]
+
+[[permission]]
+identifier = "deny-check-port-in-use"
+description = "Denies the check_port_in_use command without any pre-configured scope."
+commands.deny = ["check_port_in_use"]

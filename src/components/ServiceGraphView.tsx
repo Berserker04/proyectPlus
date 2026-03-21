@@ -2,6 +2,7 @@ import { memo } from "react";
 import {
   Background,
   BackgroundVariant,
+  ConnectionMode,
   Controls,
   MiniMap,
   Panel,
@@ -13,6 +14,7 @@ import {
 } from "@xyflow/react";
 import type { Microservice, Project } from "@/lib/domain/models";
 import { ServiceFlowEdge, type ServiceFlowEdgeData } from "./ServiceFlowEdge";
+import { ServiceConnectionLine } from "./ServiceConnectionLine";
 import { ServiceGraphNode, type ServiceGraphNodeData } from "./ServiceGraphNode";
 
 interface ServiceGraphViewProps {
@@ -26,6 +28,7 @@ interface ServiceGraphViewProps {
   onStopAll: () => void;
   onNodesChange: (changes: NodeChange<Node<ServiceGraphNodeData>>[]) => void;
   onConnect: (connection: Connection) => void;
+  onNodeSelect: (serviceId: string) => void;
   onDeleteEdges: (edgeIds: string[]) => void;
   onPaneClick: () => void;
 }
@@ -39,6 +42,13 @@ const edgeTypes = {
 };
 
 function ServiceGraphViewInner(props: ServiceGraphViewProps) {
+  const isValidConnection = (connection: Connection) => Boolean(
+    connection.source
+    && connection.target
+    && connection.source !== connection.target
+    && !props.edges.some((edge) => edge.source === connection.source && edge.target === connection.target),
+  );
+
   return (
     <div className="view-graph">
       <div className="view-header graph-header">
@@ -78,14 +88,23 @@ function ServiceGraphViewInner(props: ServiceGraphViewProps) {
             edgeTypes={edgeTypes}
             onNodesChange={props.onNodesChange}
             onConnect={props.onConnect}
+            onNodeClick={(_event, node) => props.onNodeSelect(node.id)}
             onPaneClick={props.onPaneClick}
             onEdgesDelete={(edges) => props.onDeleteEdges(edges.map((edge) => edge.id))}
+            isValidConnection={isValidConnection}
             deleteKeyCode={["Backspace", "Delete"]}
             defaultEdgeOptions={{ type: "serviceEdge" }}
-            connectionLineClassName="service-connection-line"
+            connectionLineComponent={ServiceConnectionLine}
             className="service-flow-canvas"
+            connectionMode={ConnectionMode.Loose}
+            connectionRadius={26}
             minZoom={0.35}
             maxZoom={1.6}
+            nodesDraggable
+            nodesConnectable
+            elementsSelectable
+            panOnDrag={[1, 2]}
+            selectionOnDrag={false}
           >
             <Background
               variant={BackgroundVariant.Dots}

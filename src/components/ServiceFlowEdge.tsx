@@ -2,10 +2,12 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  useInternalNode,
   type EdgeProps,
 } from "@xyflow/react";
 import type { ProjectTopologyEdge } from "@/lib/domain/models";
-import { formatEdgeTelemetry } from "@/lib/ui/serviceGraph";
+import { getFloatingEdgeGeometry } from "@/lib/ui/flowGeometry";
+import { formatEdgeTelemetry, getEdgeToneColor } from "@/lib/ui/serviceGraph";
 
 export interface ServiceFlowEdgeData {
   edge: ProjectTopologyEdge;
@@ -17,6 +19,8 @@ export interface ServiceFlowEdgeData {
 
 export function ServiceFlowEdge({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -26,24 +30,50 @@ export function ServiceFlowEdge({
   data,
   selected,
 }: EdgeProps<ServiceFlowEdgeData>) {
-  const [path, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+  const geometry = sourceNode && targetNode ? getFloatingEdgeGeometry(sourceNode, targetNode) : null;
 
   const telemetry = formatEdgeTelemetry(data?.edge.telemetry);
+  const strokeColor = getEdgeToneColor(telemetry.tone);
+  const markerId = `service-flow-edge-arrow-${id}`;
   const edgeLabel = data?.edge.label ?? `${data?.sourceName ?? "Source"} -> ${data?.targetName ?? "Target"}`;
+  const [path, labelX, labelY] = getBezierPath({
+    sourceX: geometry?.sourceX ?? sourceX,
+    sourceY: geometry?.sourceY ?? sourceY,
+    sourcePosition: geometry?.sourcePosition ?? sourcePosition,
+    targetX: geometry?.targetX ?? targetX,
+    targetY: geometry?.targetY ?? targetY,
+    targetPosition: geometry?.targetPosition ?? targetPosition,
+  });
 
   return (
     <>
-      <BaseEdge id={id} path={path} className={`service-flow-edge service-flow-edge-${telemetry.tone}${selected ? " is-selected" : ""}`} />
+      <defs>
+        <marker
+          id={markerId}
+          markerWidth="14"
+          markerHeight="14"
+          viewBox="0 0 14 14"
+          refX="11.25"
+          refY="7"
+          orient="auto"
+          markerUnits="userSpaceOnUse"
+        >
+          <path d="M 1 1 L 13 7 L 1 13 z" fill={strokeColor} />
+        </marker>
+      </defs>
+
+      <BaseEdge
+        id={id}
+        path={path}
+        markerEnd={`url(#${markerId})`}
+        interactionWidth={32}
+        className={`service-flow-edge service-flow-edge-${telemetry.tone}${selected ? " is-selected" : ""}`}
+      />
       <EdgeLabelRenderer>
         <div
-          className={`service-edge-label service-edge-label-${telemetry.tone}${selected ? " is-selected" : ""}`}
+          className={`service-edge-label service-edge-label-${telemetry.tone}${selected ? " is-selected" : ""} nodrag nopan`}
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
           }}
@@ -58,8 +88,26 @@ export function ServiceFlowEdge({
             <span>{telemetry.errors}</span>
           </div>
           <div className="service-edge-actions">
-            <button type="button" onClick={() => data?.onEdit(data.edge)}>Rename</button>
-            <button type="button" onClick={() => data?.onDelete(id)}>Remove</button>
+            <button
+              type="button"
+              className="nodrag nopan"
+              onClick={(event) => {
+                event.stopPropagation();
+                data?.onEdit(data.edge);
+              }}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              className="nodrag nopan"
+              onClick={(event) => {
+                event.stopPropagation();
+                data?.onDelete(id);
+              }}
+            >
+              Remove
+            </button>
           </div>
         </div>
       </EdgeLabelRenderer>

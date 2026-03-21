@@ -28,7 +28,12 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 
 - La UI principal ahora renderiza observabilidad dentro de nodos React Flow: el estado visual combina status, CPU y RAM en una sola senal de presion por nodo.
 - El inspector derecho concentra `Logs`, y reserva `Events`, `k6` y `Alerts` como superficies placeholder ya conectadas al nodo seleccionado.
+- La navegacion del inspector entre nodos ya no usa una banda de chips creciente; ahora agrupa `microservices` y `workers` en dos selects para dejar mas espacio al rail de logs.
 - Los edges manuales ya tienen contrato visual para `rps`, latencia y error rate, pero mientras no exista backend de red permanecen en modo neutro sin trafico real.
+- La rail de logs en vivo vuelve a depender de permisos explicitos de eventos Tauri; el canvas ya no carga acciones secundarias para priorizar seleccion, telemetria y relacion entre nodos.
+- El highlight del nodo y el inspector ahora comparten `focusedServiceId` como unica fuente de verdad, asi que logs y contexto visual se mantienen alineados incluso si el usuario hace click en el fondo del canvas.
+- La linea temporal de conexion y el edge final ahora usan flecha y geometria flotante: el preview sale del borde mas cercano, conserva el tono visual del flujo y muestra estado valido/invalido durante el gesto.
+- Los refreshes de telemetria ya no reemplazan el estado interactivo del canvas; React Flow conserva localmente `dragging` y `selected` mientras el dashboard rehidrata solo los datos operativos del nodo.
 
 ## Checklist local
 - [x] `T3.1.1 | US3.1 |` Recolectar CPU y RAM por proceso y totales del sistema.
@@ -48,6 +53,9 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-004`: se rearmo la experiencia de observabilidad para separar salud global e inspeccion por servicio sin introducir nuevos contratos backend.
 
 - `SC-008`: observabilidad ahora vive en un canvas React Flow con nodos de telemetria viva, logs en la rail derecha y edges preparados para telemetria futura.
+- `SC-009`: se corrigio la escucha de logs en vivo y la seleccion de nodos para que el inspector derecho mantenga contexto sin romper la interaccion del canvas.
+- `SC-010`: observabilidad endurecio la seleccion del canvas para que el rail derecho, el highlight del nodo y los labels de edges no pierdan contexto por drag o paneos accidentales.
+- `SC-011`: observabilidad compacto el switcher del inspector derecho en dos selects por tipo para que el rail de logs no pierda espacio util al crecer el grafo.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

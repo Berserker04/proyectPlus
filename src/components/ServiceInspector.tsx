@@ -44,6 +44,8 @@ const tabs: Array<{ id: InspectorTab; label: string }> = [
 
 export function ServiceInspector(props: ServiceInspectorProps) {
   const { service } = props;
+  const microservices = props.services.filter((item) => item.kind === "service");
+  const workers = props.services.filter((item) => item.kind === "worker");
 
   return (
     <aside className="service-inspector">
@@ -57,16 +59,47 @@ export function ServiceInspector(props: ServiceInspectorProps) {
 
       {props.services.length > 0 && (
         <div className="inspector-service-switcher">
-          {props.services.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`inspector-service-chip${item.id === service?.id ? " active" : ""}`}
-              onClick={() => props.onSelectService(item.id)}
+          <label className="inspector-service-select-group">
+            <span>Microservices</span>
+            <select
+              className="inspector-service-select"
+              value={service?.kind === "service" ? service.id : ""}
+              onChange={(event) => {
+                if (event.target.value) props.onSelectService(event.target.value);
+              }}
+              disabled={microservices.length === 0}
             >
-              {item.name}
-            </button>
-          ))}
+              <option value="">
+                {microservices.length === 0 ? "No microservices" : "Select microservice"}
+              </option>
+              {microservices.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="inspector-service-select-group">
+            <span>Workers</span>
+            <select
+              className="inspector-service-select"
+              value={service?.kind === "worker" ? service.id : ""}
+              onChange={(event) => {
+                if (event.target.value) props.onSelectService(event.target.value);
+              }}
+              disabled={workers.length === 0}
+            >
+              <option value="">
+                {workers.length === 0 ? "No workers" : "Select worker"}
+              </option>
+              {workers.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       )}
 

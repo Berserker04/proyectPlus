@@ -8,7 +8,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import type { Connection, Edge, Node, NodeChange } from "@xyflow/react";
+import { applyNodeChanges, type Connection, type Edge, type Node, type NodeChange } from "@xyflow/react";
 import type {
   AppSettings,
   DashboardSnapshot,
@@ -60,7 +60,7 @@ type AppView = "graph" | "settings";
 type InspectorTab = "logs" | "events" | "k6" | "alerts";
 
 const DEFAULT_NODE_WIDTH = 330;
-const DEFAULT_NODE_HEIGHT = 248;
+const DEFAULT_NODE_HEIGHT = 216;
 
 function emptySnapshot(): DashboardSnapshot {
   return {
@@ -92,6 +92,39 @@ function buildDefaultLayout(index: number): ServiceNodeLayout {
   };
 }
 
+function buildGraphNode(args: {
+  service: Microservice;
+  layout: ServiceNodeLayout;
+  selected: boolean;
+  previous?: Node<ServiceGraphNodeData>;
+  onFocus: (serviceId: string) => void;
+  onRun: (service: Microservice) => void;
+  onStop: (service: Microservice) => void;
+  onRestart: (service: Microservice) => void;
+}): Node<ServiceGraphNodeData> {
+  const { service, layout, selected, previous, onFocus, onRun, onStop, onRestart } = args;
+
+  return {
+    ...previous,
+    id: service.id,
+    type: "serviceNode",
+    position: { x: layout.x, y: layout.y },
+    selected,
+    data: {
+      service,
+      telemetry: buildPressureTelemetry(service),
+      onFocus,
+      onRun,
+      onStop,
+      onRestart,
+    },
+    dragHandle: ".flow-node-drag-handle",
+    draggable: true,
+    deletable: false,
+    selectable: true,
+  };
+}
+
 export default function App() {
   const isDesktop = Boolean(window.__TAURI_INTERNALS__);
   const logViewportRef = useRef<HTMLDivElement | null>(null);
@@ -99,6 +132,7 @@ export default function App() {
 
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
   const [topology, setTopology] = useState<ProjectTopology | null>(null);
+  const [flowNodes, setFlowNodes] = useState<Array<Node<ServiceGraphNodeData>>>([]);
   const [isTopologyDirty, setIsTopologyDirty] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     dashboardRefreshSeconds: 2,
@@ -341,10 +375,16 @@ export default function App() {
   }, []);
 
   const handleNodesChange = useCallback((changes: NodeChange<Node<ServiceGraphNodeData>>[]) => {
+    let nextFocusedServiceId: string | null = null;
+    setFlowNodes((current) => applyNodeChanges(changes, current));
+
     updateTopology((current) => {
       let changed = false;
       const nextLayouts = { ...current.nodeLayouts };
       for (const change of changes) {
+        if (change.type === "select" && change.selected) {
+          nextFocusedServiceId = change.id;
+        }
         if (change.type === "position" && change.position) {
           const existing = nextLayouts[change.id] ?? buildDefaultLayout(0);
           nextLayouts[change.id] = { ...existing, x: change.position.x, y: change.position.y };
@@ -362,6 +402,10 @@ export default function App() {
       }
       return changed ? { ...current, nodeLayouts: nextLayouts, updatedAt: new Date().toISOString() } : current;
     });
+
+    if (nextFocusedServiceId) {
+      setFocusedServiceId(nextFocusedServiceId);
+    }
   }, [updateTopology]);
 
   const handleConnect = useCallback((connection: Connection) => {
@@ -450,37 +494,28 @@ export default function App() {
     }
   }, [addToast]);
 
-  const nodes = useMemo<Array<Node<ServiceGraphNodeData>>>(() => (
-    snapshot.services.map((service, index) => {
-      const layout = topology?.nodeLayouts[service.id] ?? service.graph ?? buildDefaultLayout(index);
-      return {
-        id: service.id,
-        type: "serviceNode",
-        position: { x: layout.x, y: layout.y },
-        data: {
+  useEffect(() => {
+    const nodeLayouts = topology?.nodeLayouts ?? {};
+
+    // Keep React Flow interaction state local so telemetry refreshes do not interrupt dragging.
+    setFlowNodes((current) => {
+      const previousById = new Map(current.map((node) => [node.id, node]));
+
+      return snapshot.services.map((service, index) => {
+        const layout = nodeLayouts[service.id] ?? service.graph ?? buildDefaultLayout(index);
+        return buildGraphNode({
           service,
-          telemetry: buildPressureTelemetry(service),
-          onSelect: (serviceId) => {
-            setFocusedServiceId(serviceId);
-          },
+          layout,
+          selected: service.id === focusedServiceId,
+          previous: previousById.get(service.id),
+          onFocus: setFocusedServiceId,
           onRun: (item) => void handleRunService(item),
           onStop: (item) => void handleStopService(item),
           onRestart: (item) => void handleRestartService(item),
-          onLogs: (item) => {
-            setFocusedServiceId(item.id);
-            setInspectorTab("logs");
-            void loadLogsForService(item.id);
-          },
-          onTerminal: (item) => void openServiceTerminal(item.id).catch((error: unknown) => addToast("error", String(error))),
-          onEdit: (item) => openEditService(item),
-          onDelete: (item) => setServiceToDelete(item),
-        },
-        draggable: true,
-        deletable: false,
-        selectable: true,
-      };
-    })
-  ), [addToast, handleRestartService, handleRunService, handleStopService, loadLogsForService, snapshot.services, topology?.nodeLayouts]);
+        });
+      });
+    });
+  }, [focusedServiceId, handleRestartService, handleRunService, handleStopService, snapshot.services, topology?.nodeLayouts]);
 
   const edges = useMemo<Array<Edge<ServiceFlowEdgeData>>>(() => (
     (topology?.edges ?? [])
@@ -738,7 +773,7 @@ export default function App() {
               <ServiceGraphView
                 activeProject={activeProject}
                 services={snapshot.services}
-                nodes={nodes}
+                nodes={flowNodes}
                 edges={edges}
                 isPendingAction={isPendingAction}
                 onAddService={() => {
@@ -750,6 +785,7 @@ export default function App() {
                 onStopAll={() => void handleStopAll()}
                 onNodesChange={handleNodesChange}
                 onConnect={handleConnect}
+                onNodeSelect={(serviceId) => setFocusedServiceId(serviceId)}
                 onDeleteEdges={handleDeleteEdges}
                 onPaneClick={() => undefined}
               />
