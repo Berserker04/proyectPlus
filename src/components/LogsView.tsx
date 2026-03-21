@@ -1,5 +1,7 @@
-import { useRef, useEffect, type RefObject } from "react";
+import type { RefObject } from "react";
 import type { Microservice, ServiceLogSnapshot, ServiceLogEntry } from "@/lib/domain/models";
+import { LogMessage } from "@/components/LogMessage";
+import { formatLogMetaTimestamp } from "@/lib/ui/logs";
 import { statusColor } from "./ServiceCard";
 
 interface LogsViewProps {
@@ -93,19 +95,15 @@ export function LogsView({
         )}
         {visibleLogEntries
           .filter((e) => logFilter === "all" || e.stream === logFilter)
-          .map((entry) => {
-            const formattedMessage = entry.message.replace(
-              /(https?:\/\/[^\s]+)/g,
-              '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:underline;">$1</a>',
-            );
-            return (
-              <div key={entry.sequence} className={`log-entry log-${entry.level}`}>
-                <span className="log-ts">{entry.timestamp.slice(11, 23)}</span>
-                <span className={`log-stream log-stream-${entry.stream}`}>{entry.stream}</span>
-                <span className="log-msg" dangerouslySetInnerHTML={{ __html: formattedMessage }} />
+          .map((entry) => (
+            <div key={entry.sequence} className={`log-entry log-${entry.level}`}>
+              <span className="log-ts">{formatLogMetaTimestamp(entry.timestamp)}</span>
+              <span className={`log-stream log-stream-${entry.stream}`}>{entry.stream}</span>
+              <div className="log-msg">
+                <LogMessage message={entry.message} />
               </div>
-            );
-          })}
+            </div>
+          ))}
       </div>
     </div>
   );

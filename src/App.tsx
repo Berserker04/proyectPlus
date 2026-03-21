@@ -57,6 +57,7 @@ import { ServiceInspector } from "@/components/ServiceInspector";
 import type { ServiceFlowEdgeData } from "@/components/ServiceFlowEdge";
 import type { ServiceGraphNodeData } from "@/components/ServiceGraphNode";
 import { Modal } from "@/components/Modal";
+import { formatLogMetaTimestamp } from "@/lib/ui/logs";
 import { buildPressureTelemetry } from "@/lib/ui/serviceGraph";
 
 type AppView = "graph" | "settings";
@@ -68,6 +69,7 @@ const DEFAULT_INSPECTOR_WIDTH = 392;
 const MIN_INSPECTOR_WIDTH = 320;
 const MIN_GRAPH_WIDTH = 420;
 const INSPECTOR_WIDTH_STORAGE_KEY = "mscc.inspector.width";
+const LOG_META_VISIBLE_STORAGE_KEY = "mscc.logs.meta.visible";
 
 function clampInspectorWidth(width: number, containerWidth: number) {
   const maxWidth = Math.max(MIN_INSPECTOR_WIDTH, containerWidth - MIN_GRAPH_WIDTH);
@@ -166,6 +168,7 @@ export default function App() {
 
   const [logSnapshot, setLogSnapshot] = useState<ServiceLogSnapshot | null>(null);
   const [isLogAutoscroll, setIsLogAutoscroll] = useState(true);
+  const [showLogMeta, setShowLogMeta] = useState(() => window.localStorage.getItem(LOG_META_VISIBLE_STORAGE_KEY) !== "0");
   const [logQuery, setLogQuery] = useState("");
   const deferredLogQuery = useDeferredValue(logQuery);
   const [logFilter, setLogFilter] = useState<"all" | "stdout" | "stderr">("all");
@@ -476,6 +479,10 @@ export default function App() {
     window.localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(inspectorWidth));
   }, [inspectorWidth]);
 
+  useEffect(() => {
+    window.localStorage.setItem(LOG_META_VISIBLE_STORAGE_KEY, showLogMeta ? "1" : "0");
+  }, [showLogMeta]);
+
   const graphLayoutStyle = useMemo(() => (
     { "--inspector-width": `${inspectorWidth}px` } as CSSProperties
   ), [inspectorWidth]);
@@ -785,7 +792,9 @@ export default function App() {
 
   const handleCopyLogs = useCallback(() => {
     if (!logSnapshot) return;
-    const text = logSnapshot.entries.map((entry) => `[${entry.timestamp.slice(11, 23)}] [${entry.stream}] ${entry.message}`).join("\n");
+    const text = logSnapshot.entries
+      .map((entry) => `[${formatLogMetaTimestamp(entry.timestamp)}] [${entry.stream}] ${entry.message}`)
+      .join("\n");
     void navigator.clipboard.writeText(text)
       .then(() => addToast("success", "Logs copied to clipboard."))
       .catch((error) => addToast("error", "No fue posible copiar los logs.", String(error)));
@@ -945,10 +954,12 @@ export default function App() {
               logFilter={logFilter}
               logQuery={logQuery}
               isLogAutoscroll={isLogAutoscroll}
+              showLogMeta={showLogMeta}
               visibleLogEntries={visibleLogEntries}
               onFilterChange={setLogFilter}
               onQueryChange={setLogQuery}
               onToggleAutoscroll={() => setIsLogAutoscroll((current) => !current)}
+              onToggleLogMeta={() => setShowLogMeta((current) => !current)}
               onCopyLogs={handleCopyLogs}
               onClearLogs={() => void handleClearLogs()}
               logViewportRef={logViewportRef}

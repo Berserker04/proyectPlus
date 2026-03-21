@@ -1,5 +1,7 @@
 import type { RefObject } from "react";
 import type { Microservice, ServiceLogEntry, ServiceLogSnapshot } from "@/lib/domain/models";
+import { LogMessage } from "@/components/LogMessage";
+import { formatLogMetaTimestamp } from "@/lib/ui/logs";
 import {
   formatBytes,
   formatPercent,
@@ -26,10 +28,12 @@ interface ServiceInspectorProps {
   logFilter: "all" | "stdout" | "stderr";
   logQuery: string;
   isLogAutoscroll: boolean;
+  showLogMeta: boolean;
   visibleLogEntries: ServiceLogEntry[];
   onFilterChange: (filter: "all" | "stdout" | "stderr") => void;
   onQueryChange: (value: string) => void;
   onToggleAutoscroll: () => void;
+  onToggleLogMeta: () => void;
   onCopyLogs: () => void;
   onClearLogs: () => void;
   logViewportRef: RefObject<HTMLDivElement | null>;
@@ -194,6 +198,9 @@ export function ServiceInspector(props: ServiceInspectorProps) {
                   <button className="btn-outline" type="button" onClick={() => props.onLogs(service)}>
                     Refresh
                   </button>
+                  <button className={`btn-outline${props.showLogMeta ? " is-active" : ""}`} type="button" onClick={props.onToggleLogMeta}>
+                    {props.showLogMeta ? "Hide meta" : "Show meta"}
+                  </button>
                   <button className="btn-outline" type="button" onClick={props.onToggleAutoscroll}>
                     {props.isLogAutoscroll ? "Pause scroll" : "Resume scroll"}
                   </button>
@@ -209,10 +216,16 @@ export function ServiceInspector(props: ServiceInspectorProps) {
                   {props.visibleLogEntries
                     .filter((entry) => props.logFilter === "all" || entry.stream === props.logFilter)
                     .map((entry) => (
-                      <div key={entry.sequence} className={`log-entry log-${entry.level}`}>
-                        <span className="log-ts">{entry.timestamp.slice(11, 23)}</span>
-                        <span className={`log-stream log-stream-${entry.stream}`}>{entry.stream}</span>
-                        <span className="log-msg">{entry.message}</span>
+                      <div key={entry.sequence} className={`log-entry log-${entry.level}${props.showLogMeta ? "" : " log-entry-compact"}`}>
+                        {props.showLogMeta ? (
+                          <>
+                            <span className="log-ts">{formatLogMetaTimestamp(entry.timestamp)}</span>
+                            <span className={`log-stream log-stream-${entry.stream}`}>{entry.stream}</span>
+                          </>
+                        ) : null}
+                        <div className="log-msg">
+                          <LogMessage message={entry.message} />
+                        </div>
                       </div>
                     ))}
                   {props.visibleLogEntries.length === 0 && (

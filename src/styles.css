@@ -30,6 +30,19 @@
 
   --success: #3ecf7e;
   --warning: #f0b429;
+  --log-token-process: #8ab4ff;
+  --log-token-context: #7dd3fc;
+  --log-token-inline-time: #6fe7c8;
+  --log-token-route: #c7d7ff;
+  --log-token-verb: #ffd27d;
+  --log-token-duration: #f7c14d;
+  --log-token-link: #8eb0ff;
+  --log-token-json-key: #8bb8ff;
+  --log-token-json-string: #8fe3b2;
+  --log-token-json-number: #ffd27d;
+  --log-token-json-boolean: #ff9db0;
+  --log-token-json-null: #97a4bb;
+  --log-token-json-punctuation: #6e7a90;
 
   --status-running: #3ecf7e;
   --status-starting: #f0b429;
@@ -493,13 +506,22 @@ body {
 }
 
 .log-entry:hover { background: rgba(255,255,255,0.02); }
+.log-entry-compact { gap: 0; }
 
 .log-ts { color: var(--text-muted); flex-shrink: 0; }
-.log-stream { flex-shrink: 0; width: 44px; }
+.log-stream {
+  flex-shrink: 0;
+  width: 56px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .log-stream-stdout { color: #6382fa; }
 .log-stream-stderr { color: #f25e6a; }
 .log-msg {
   flex: 1;
+  display: block;
   min-width: 0;
   white-space: pre-wrap;
   word-break: break-word;
@@ -510,6 +532,81 @@ body {
 .log-warn .log-msg { color: #f0b429; }
 .log-info .log-msg { color: var(--text-primary); }
 .log-debug .log-msg { color: var(--text-secondary); }
+.log-token-process { color: var(--log-token-process); font-weight: 700; }
+.log-token-context { color: var(--log-token-context); }
+.log-token-inline-time { color: var(--log-token-inline-time); }
+.log-token-route { color: var(--log-token-route); }
+.log-token-verb { color: var(--log-token-verb); font-weight: 700; }
+.log-token-duration { color: var(--log-token-duration); }
+.log-token-link {
+  color: var(--log-token-link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.log-token-level { font-weight: 700; }
+.log-token-level-log,
+.log-token-level-info { color: #8fe3b2; }
+.log-token-level-warn { color: #ffd27d; }
+.log-token-level-error { color: #ff8fa1; }
+.log-token-level-debug,
+.log-token-level-trace,
+.log-token-level-verbose { color: #9aa9c2; }
+.log-token-json-key { color: var(--log-token-json-key); }
+.log-token-json-string { color: var(--log-token-json-string); }
+.log-token-json-number { color: var(--log-token-json-number); }
+.log-token-json-boolean { color: var(--log-token-json-boolean); }
+.log-token-json-null { color: var(--log-token-json-null); font-style: italic; }
+.log-token-json-punctuation { color: var(--log-token-json-punctuation); }
+.log-json-shell {
+  display: grid;
+  gap: 8px;
+}
+.log-json-inline {
+  display: block;
+}
+.log-json-toggle {
+  justify-self: start;
+  padding: 3px 9px;
+  border: 1px solid rgba(107, 163, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(107, 163, 255, 0.08);
+  color: #d9e6ff;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.log-json-toggle:hover {
+  background: rgba(107, 163, 255, 0.16);
+  border-color: rgba(107, 163, 255, 0.34);
+  color: #f4f8ff;
+}
+.log-json-toggle.is-expanded {
+  background: rgba(62, 207, 126, 0.12);
+  border-color: rgba(62, 207, 126, 0.26);
+  color: #bff2d2;
+}
+.log-json-pretty {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  overflow-x: auto;
+  font: inherit;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.log-json-pretty code {
+  font: inherit;
+}
+.log-json-indent {
+  user-select: none;
+}
 
 /* ── Settings view ── */
 .settings-form {
@@ -613,6 +710,11 @@ body {
 }
 
 .btn-outline:hover { border-color: rgba(255,255,255,0.16); color: var(--text-primary); }
+.btn-outline.is-active {
+  border-color: rgba(107, 163, 255, 0.32);
+  color: #f4f8ff;
+  background: rgba(107, 163, 255, 0.14);
+}
 .btn-outline.danger:hover { border-color: var(--danger); color: var(--danger); }
 .btn-outline:disabled { opacity: 0.4; cursor: not-allowed; }
 

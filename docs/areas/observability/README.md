@@ -36,6 +36,8 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - Los refreshes de telemetria ya no reemplazan el estado interactivo del canvas; React Flow conserva localmente `dragging` y `selected` mientras el dashboard rehidrata solo los datos operativos del nodo.
 - El rail derecho de logs ahora mantiene el overflow encapsulado dentro de su viewport, hace wrap seguro de lineas largas y permite resize horizontal manual; el ancho elegido queda recordado localmente para no obligar al usuario a reajustarlo en cada sesion.
 - La captura de logs ahora sanea secuencias ANSI/CSI/OSC, retornos de carro inline y otros controles de terminal antes de guardar el buffer y emitir eventos en vivo, para que la UI muestre texto limpio equivalente a una consola real.
+- La UI de logs ahora renderiza el prefijo en hora local del equipo, puede ocultar o mostrar manualmente los metadatos de cada linea y colorea entidades utiles del mensaje como contexto Nest, verbos HTTP, rutas, duraciones y JSON inline.
+- Las lineas que contienen JSON valido ahora pueden expandirse o colapsarse individualmente: por defecto quedan compactas, pero al abrirlas muestran una vista pretty multiline para inspeccionar payloads sin salir del inspector.
 
 ## Checklist local
 - [x] `T3.1.1 | US3.1 |` Recolectar CPU y RAM por proceso y totales del sistema.
@@ -60,6 +62,8 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-011`: observabilidad compacto el switcher del inspector derecho en dos selects por tipo para que el rail de logs no pierda espacio util al crecer el grafo.
 - `SC-012`: la rail derecha encapsula el scroll de logs y ahora se puede expandir o encoger manualmente para diagnostico sin que las lineas largas rompan el layout.
 - `SC-013`: los logs en vivo ahora eliminan secuencias ANSI y otros controles de terminal antes de renderizarse, evitando basura visual al capturar salidas coloreadas como `nest start --watch`.
+- `SC-014`: observabilidad ahora muestra el prefijo de logs en hora local, deja alternar manualmente la visibilidad de `hora + stream` y aplica resaltado semantico para que Nest, rutas y JSON se lean mas rapido.
+- `SC-015`: los logs JSON ahora tienen toggle por linea para alternar entre una vista compacta y otra pretty multiline, util cuando un servicio emite objetos estructurados largos.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)
