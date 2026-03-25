@@ -36,6 +36,7 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - El foco visible del canvas ahora nace de `focusedServiceId`: seleccionar un nodo actualiza el inspector, hacer click en el pane conserva el ultimo contexto y el drag solo vive en un grip visible dentro del header.
 - El switcher del inspector derecho ya no enumera todos los nodos como chips: ahora separa `microservices` y `workers` en dos selects compactos para preservar espacio util en proyectos grandes.
 - Cada nodo ahora expone un `easy-connect` sobre toda la tarjeta; el grip del header sigue siendo el unico punto de drag y las conexiones flotan desde la cara mas cercana del nodo en vez de quedar fijas izquierda/derecha.
+- Los edges del canvas ya no renderizan cards overlay; la relacion se lee desde la linea y un enlace seleccionado se elimina con `Suprimir/Delete`.
 - El canvas mantiene un estado local de nodos para React Flow; los refreshes de dashboard solo hidratan telemetria y metadata, sin reinicializar el estado transitorio del drag.
 
 ## Checklist local
@@ -64,6 +65,7 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - `SC-010`: discovery termino de endurecer el canvas usando `focusedServiceId` como fuente de verdad, `dragHandle` explicito en un grip visible del nodo y superficies interactivas protegidas con `nodrag` y `nopan`.
 - `SC-011`: discovery compacto el switcher del inspector derecho en dos selects por tipo de nodo para que la rail escale mejor cuando aumenta el catalogo.
 - `SC-020`: discovery simplifico el modal de nodos quitando el puerto manual; desde ahora la metadata de puerto visible llega solo desde observabilidad en runtime.
+- `SC-021`: discovery limpio el canvas retirando overlays de edges y habilitando eliminacion directa de enlaces seleccionados con `Suprimir/Delete`.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

@@ -3,8 +3,6 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { Microservice, NodeTelemetryViewModel } from "@/lib/domain/models";
 import {
   buildPressureTelemetry,
-  formatBytes,
-  formatPercent,
   getPressureLabel,
   getStatusLabel,
 } from "@/lib/ui/serviceGraph";
@@ -73,17 +71,6 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
           <span>Port {port ?? "N/A"}</span>
           <span>PID {service.pid ?? "N/A"}</span>
           <span>{pressureLabel}</span>
-        </div>
-
-        <div className="flow-node-metrics">
-          <div className="flow-stat">
-            <span>CPU</span>
-            <strong>{formatPercent(service.cpuPercent)}</strong>
-          </div>
-          <div className="flow-stat">
-            <span>RAM</span>
-            <strong>{formatBytes(service.memoryBytes)}</strong>
-          </div>
         </div>
 
         {service.issue && (

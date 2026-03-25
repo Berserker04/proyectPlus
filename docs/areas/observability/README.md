@@ -29,9 +29,10 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - Logs e historial del inspector ya se cargan y refrescan solo en la pestana visible, y el autoscroll continuo usa bottom-lock inmediato para no encadenar animaciones.
 
 - La UI principal ahora renderiza observabilidad dentro de nodos React Flow: el estado visual combina status, CPU y RAM en una sola senal de presion por nodo.
+- Las metricas crudas de CPU y RAM ya no se duplican dentro del nodo; viven solo en el inspector derecho del servicio seleccionado.
 - El inspector derecho concentra `Logs`, y reserva `Events`, `k6` y `Alerts` como superficies placeholder ya conectadas al nodo seleccionado.
 - La navegacion del inspector entre nodos ya no usa una banda de chips creciente; ahora agrupa `microservices` y `workers` en dos selects para dejar mas espacio al rail de logs.
-- Los edges manuales ya tienen contrato visual para `rps`, latencia y error rate, pero mientras no exista backend de red permanecen en modo neutro sin trafico real.
+- Los edges manuales se renderizan como lineas limpias con tono neutro; mientras no exista backend de red no muestran cards ni trafico placeholder.
 - La rail de logs en vivo vuelve a depender de permisos explicitos de eventos Tauri; el canvas ya no carga acciones secundarias para priorizar seleccion, telemetria y relacion entre nodos.
 - El highlight del nodo y el inspector ahora comparten `focusedServiceId` como unica fuente de verdad, asi que logs y contexto visual se mantienen alineados incluso si el usuario hace click en el fondo del canvas.
 - La linea temporal de conexion y el edge final ahora usan flecha y geometria flotante: el preview sale del borde mas cercano, conserva el tono visual del flujo y muestra estado valido/invalido durante el gesto.
@@ -60,7 +61,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 
 - `SC-008`: observabilidad ahora vive en un canvas React Flow con nodos de telemetria viva, logs en la rail derecha y edges preparados para telemetria futura.
 - `SC-009`: se corrigio la escucha de logs en vivo y la seleccion de nodos para que el inspector derecho mantenga contexto sin romper la interaccion del canvas.
-- `SC-010`: observabilidad endurecio la seleccion del canvas para que el rail derecho, el highlight del nodo y los labels de edges no pierdan contexto por drag o paneos accidentales.
+- `SC-010`: observabilidad endurecio la seleccion del canvas para que el rail derecho, el highlight del nodo y la seleccion de enlaces no pierdan contexto por drag o paneos accidentales.
 - `SC-011`: observabilidad compacto el switcher del inspector derecho en dos selects por tipo para que el rail de logs no pierda espacio util al crecer el grafo.
 - `SC-012`: la rail derecha encapsula el scroll de logs y ahora se puede expandir o encoger manualmente para diagnostico sin que las lineas largas rompan el layout.
 - `SC-013`: los logs en vivo ahora eliminan secuencias ANSI y otros controles de terminal antes de renderizarse, evitando basura visual al capturar salidas coloreadas como `nest start --watch`.
@@ -69,6 +70,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-017`: el polling del dashboard dejo de refrescar toda la tabla de procesos del SO; ahora limita `sysinfo` a RAM, CPU global y PIDs supervisados para evitar el crash nativo de Windows al abrir la app.
 - `SC-020`: observabilidad dejo de depender del puerto manual en la UI y ahora expone solo el puerto TCP real detectado para cada nodo supervisado.
 - `SC-019`: la severidad detectada en logs ahora tambien alimenta el tono del nodo en React Flow, incluyendo lineas `ERROR` emitidas por Nest via `stdout`, sin degradar el `status` operativo del proceso.
+- `SC-021`: observabilidad retiro las cards duplicadas de CPU/RAM del nodo y elimino los overlays placeholder de trafico en los edges, dejando la telemetria detallada solo en el inspector.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

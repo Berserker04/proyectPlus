@@ -28,6 +28,8 @@ interface ServiceGraphViewProps {
   onStopAll: () => void;
   onNodesChange: (changes: NodeChange<Node<ServiceGraphNodeData>>[]) => void;
   onConnect: (connection: Connection) => void;
+  onEdgeSelect: (edgeId: string) => void;
+  onClearEdgeSelection: () => void;
   onNodeSelect: (serviceId: string) => void;
   onDeleteEdges: (edgeIds: string[]) => void;
   onPaneClick: () => void;
@@ -88,8 +90,15 @@ function ServiceGraphViewInner(props: ServiceGraphViewProps) {
             edgeTypes={edgeTypes}
             onNodesChange={props.onNodesChange}
             onConnect={props.onConnect}
-            onNodeClick={(_event, node) => props.onNodeSelect(node.id)}
-            onPaneClick={props.onPaneClick}
+            onNodeClick={(_event, node) => {
+              props.onClearEdgeSelection();
+              props.onNodeSelect(node.id);
+            }}
+            onEdgeClick={(_event, edge) => props.onEdgeSelect(edge.id)}
+            onPaneClick={() => {
+              props.onClearEdgeSelection();
+              props.onPaneClick();
+            }}
             onEdgesDelete={(edges) => props.onDeleteEdges(edges.map((edge) => edge.id))}
             isValidConnection={isValidConnection}
             deleteKeyCode={["Backspace", "Delete"]}

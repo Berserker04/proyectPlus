@@ -884,7 +884,6 @@ body {
 .service-inspector,
 .modal,
 .toast,
-.service-edge-label,
 .flow-node {
   backdrop-filter: blur(18px);
 }
@@ -1020,7 +1019,7 @@ body {
 .flow-node {
   position: relative;
   width: 330px;
-  min-height: 216px;
+  min-height: 184px;
   border-radius: 26px;
   border: 1px solid rgba(158, 208, 255, 0.18);
   overflow: hidden;
@@ -1223,35 +1222,6 @@ body {
   color: #cad5e7;
 }
 
-.flow-node-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  cursor: default;
-}
-
-.flow-stat {
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(8, 15, 28, 0.42);
-}
-
-.flow-stat span {
-  display: block;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.flow-stat strong {
-  display: block;
-  margin-top: 6px;
-  font-size: 14px;
-  color: #f4f8ff;
-}
-
 .flow-node-path {
   padding: 10px 12px;
   border-radius: 16px;
@@ -1292,8 +1262,7 @@ body {
 }
 
 .flow-action,
-.flow-tool-btn,
-.service-edge-actions button {
+.flow-tool-btn {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
@@ -1318,8 +1287,7 @@ body {
 }
 
 .flow-action:hover,
-.flow-tool-btn:hover,
-.service-edge-actions button:hover {
+.flow-tool-btn:hover {
   transform: translateY(-1px);
   border-color: rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
@@ -1431,32 +1399,6 @@ body {
   stroke-width: 3;
   filter: drop-shadow(0 0 12px rgba(107, 163, 255, 0.18));
 }
-
-.service-edge-label {
-  position: absolute;
-  pointer-events: all;
-  min-width: 210px;
-  max-width: 260px;
-  padding: 10px 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(8, 15, 28, 0.82);
-  color: #dbe6f7;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
-  cursor: default;
-}
-
-.service-edge-heading {
-  display: grid;
-  gap: 2px;
-}
-
-.service-edge-heading strong {
-  font-size: 12px;
-}
-
-.service-edge-heading span,
-.service-edge-metrics span,
 .inspector-eyebrow,
 .inspector-header p,
 .inspector-placeholder p,
@@ -1465,27 +1407,12 @@ body {
   color: var(--text-secondary);
 }
 
-.service-edge-metrics,
-.service-edge-actions,
 .inspector-log-actions,
 .inspector-log-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
-}
-
-.service-edge-actions button {
-  padding: 5px 8px;
-  font-size: 11px;
-}
-
-.service-edge-label-warning {
-  border-color: rgba(247, 193, 77, 0.3);
-}
-
-.service-edge-label-critical {
-  border-color: rgba(255, 98, 125, 0.3);
 }
 
 .service-inspector {
@@ -1682,7 +1609,6 @@ body {
 .sidebar,
 .modal,
 .toast,
-.service-edge-label,
 .service-inspector {
   background-color: rgba(10, 16, 28, 0.9);
 }

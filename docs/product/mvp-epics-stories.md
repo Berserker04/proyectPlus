@@ -172,7 +172,7 @@ Estado actual:
 
 Criterios de aceptacion:
 - La UI refresca estado visible cada 1 o 2 segundos sin bloquearse.
-- Cada servicio muestra CPU, RAM, puerto detectado y uptime.
+- Cada servicio expone CPU, RAM, puerto detectado y uptime; en el canvas el nodo sintetiza la presion y el inspector derecho concentra CPU/RAM.
 - La app muestra totales de CPU y RAM del sistema.
 
 Dependencias:
@@ -425,13 +425,13 @@ Objetivo: Cerrar los huecos remanentes de UX del canvas para que el foco del ins
 
 Estado actual:
 - `focusedServiceId` ahora gobierna tanto el highlight del nodo como el contexto del inspector derecho.
-- El drag del nodo queda restringido al header real mediante `dragHandle`, y botones o labels interactivos usan `nodrag` y `nopan`.
+- El drag del nodo queda restringido al header real mediante `dragHandle`, y las acciones runtime usan `nodrag` y `nopan`.
 - Las acciones `Start`, `Stop` y `Restart` dentro del nodo enfocan primero el servicio antes de ejecutar el runtime.
 
 Criterios de aceptacion:
 - Click en el cuerpo del nodo actualiza el inspector y mantiene el highlight correcto.
 - Click en el fondo del canvas no limpia el ultimo contexto del inspector.
-- Labels de edges y acciones runtime se pueden usar sin arrastres o paneos accidentales.
+- La seleccion de enlaces y las acciones runtime se pueden usar sin arrastres o paneos accidentales.
 
 Dependencias:
 - `SC-009`
@@ -516,3 +516,23 @@ Dependencias:
 
 Trazabilidad:
 - Roadmap: `SC-020`
+
+### [x] SC-021 - Limpieza visual y teclado del canvas
+Objetivo: reducir ruido en el grafo dejando la telemetria detallada en el inspector y haciendo que los enlaces se editen desde una interaccion mas directa.
+
+Estado actual:
+- Los nodos del canvas ya no renderizan cards de CPU o RAM; esas metricas viven solo en el inspector derecho.
+- Los edges del canvas ya no muestran cards placeholder de trafico ni acciones inline; quedan como lineas limpias con estado visual.
+- Un edge seleccionado se puede eliminar con `Suprimir/Delete` y la topologia persiste sin depender del overlay viejo.
+
+Criterios de aceptacion:
+- El nodo del canvas conserva estado, puerto, PID y senal de presion sin duplicar CPU/RAM.
+- Los enlaces manuales se leen visualmente desde la linea, sin cards de trafico ficticio entre nodos.
+- Seleccionar un enlace y pulsar `Suprimir/Delete` lo elimina del canvas y de la topologia persistida.
+
+Dependencias:
+- `SC-010`
+- `US3.1`
+
+Trazabilidad:
+- Roadmap: `SC-021`

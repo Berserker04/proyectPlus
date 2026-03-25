@@ -1,6 +1,5 @@
 import {
   BaseEdge,
-  EdgeLabelRenderer,
   getBezierPath,
   useInternalNode,
   type EdgeProps,
@@ -11,10 +10,6 @@ import { formatEdgeTelemetry, getEdgeToneColor } from "@/lib/ui/serviceGraph";
 
 export interface ServiceFlowEdgeData {
   edge: ProjectTopologyEdge;
-  sourceName: string;
-  targetName: string;
-  onEdit: (edge: ProjectTopologyEdge) => void;
-  onDelete: (edgeId: string) => void;
 }
 
 export function ServiceFlowEdge({
@@ -37,8 +32,7 @@ export function ServiceFlowEdge({
   const telemetry = formatEdgeTelemetry(data?.edge.telemetry);
   const strokeColor = getEdgeToneColor(telemetry.tone);
   const markerId = `service-flow-edge-arrow-${id}`;
-  const edgeLabel = data?.edge.label ?? `${data?.sourceName ?? "Source"} -> ${data?.targetName ?? "Target"}`;
-  const [path, labelX, labelY] = getBezierPath({
+  const [path] = getBezierPath({
     sourceX: geometry?.sourceX ?? sourceX,
     sourceY: geometry?.sourceY ?? sourceY,
     sourcePosition: geometry?.sourcePosition ?? sourcePosition,
@@ -71,46 +65,6 @@ export function ServiceFlowEdge({
         interactionWidth={32}
         className={`service-flow-edge service-flow-edge-${telemetry.tone}${selected ? " is-selected" : ""}`}
       />
-      <EdgeLabelRenderer>
-        <div
-          className={`service-edge-label service-edge-label-${telemetry.tone}${selected ? " is-selected" : ""} nodrag nopan`}
-          style={{
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-          }}
-        >
-          <div className="service-edge-heading">
-            <strong>{edgeLabel}</strong>
-            <span>{data?.sourceName}{" -> "}{data?.targetName}</span>
-          </div>
-          <div className="service-edge-metrics">
-            <span>{telemetry.requests}</span>
-            <span>{telemetry.latency}</span>
-            <span>{telemetry.errors}</span>
-          </div>
-          <div className="service-edge-actions">
-            <button
-              type="button"
-              className="nodrag nopan"
-              onClick={(event) => {
-                event.stopPropagation();
-                data?.onEdit(data.edge);
-              }}
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              className="nodrag nopan"
-              onClick={(event) => {
-                event.stopPropagation();
-                data?.onDelete(id);
-              }}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      </EdgeLabelRenderer>
     </>
   );
 }

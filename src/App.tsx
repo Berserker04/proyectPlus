@@ -64,12 +64,21 @@ type AppView = "graph" | "settings";
 type InspectorTab = "logs" | "events" | "k6" | "alerts";
 
 const DEFAULT_NODE_WIDTH = 330;
-const DEFAULT_NODE_HEIGHT = 216;
+const DEFAULT_NODE_HEIGHT = 184;
 const DEFAULT_INSPECTOR_WIDTH = 392;
 const MIN_INSPECTOR_WIDTH = 320;
 const MIN_GRAPH_WIDTH = 420;
 const INSPECTOR_WIDTH_STORAGE_KEY = "mscc.inspector.width";
 const LOG_META_VISIBLE_STORAGE_KEY = "mscc.logs.meta.visible";
+
+function isEdgeDeleteKey(event: KeyboardEvent): boolean {
+  return event.key === "Delete" || event.key === "Del" || event.code === "Delete";
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement
+    && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+}
 
 function clampInspectorWidth(width: number, containerWidth: number) {
   const maxWidth = Math.max(MIN_INSPECTOR_WIDTH, containerWidth - MIN_GRAPH_WIDTH);
@@ -158,6 +167,7 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [view, setView] = useState<AppView>("graph");
   const [focusedServiceId, setFocusedServiceId] = useState<string | null>(null);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("logs");
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     const stored = window.localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY);
@@ -556,26 +566,17 @@ export default function App() {
 
   const handleDeleteEdges = useCallback((edgeIds: string[]) => {
     if (edgeIds.length === 0) return;
-    updateTopology((current) => ({
-      ...current,
-      edges: current.edges.filter((edge) => !edgeIds.includes(edge.id)),
-      updatedAt: new Date().toISOString(),
-    }));
+    setSelectedEdgeIds((current) => current.filter((edgeId) => !edgeIds.includes(edgeId)));
+    updateTopology((current) => {
+      const nextEdges = current.edges.filter((edge) => !edgeIds.includes(edge.id));
+      if (nextEdges.length === current.edges.length) return current;
+      return {
+        ...current,
+        edges: nextEdges,
+        updatedAt: new Date().toISOString(),
+      };
+    });
   }, [updateTopology]);
-
-  const handleRenameEdge = useCallback((edgeId: string) => {
-    const existing = topology?.edges.find((item) => item.id === edgeId);
-    if (!existing) return;
-    const nextLabel = window.prompt("Nombre del flujo", existing.label ?? "");
-    if (nextLabel === null) return;
-    updateTopology((current) => ({
-      ...current,
-      edges: current.edges.map((item) => (
-        item.id === edgeId ? { ...item, label: nextLabel.trim() || null } : item
-      )),
-      updatedAt: new Date().toISOString(),
-    }));
-  }, [topology?.edges, updateTopology]);
 
   const handleRunService = useCallback(async (service: Microservice) => {
     addToast("info", `Starting ${service.name}...`);
@@ -635,6 +636,41 @@ export default function App() {
     });
   }, [focusedServiceId, handleRestartService, handleRunService, handleStopService, snapshot.services, topology?.nodeLayouts]);
 
+  useEffect(() => {
+    const currentEdgeIds = new Set((topology?.edges ?? []).map((edge) => edge.id));
+    setSelectedEdgeIds((current) => current.filter((edgeId) => currentEdgeIds.has(edgeId)));
+  }, [topology?.edges]);
+
+  useEffect(() => {
+    if (
+      view !== "graph"
+      || selectedEdgeIds.length === 0
+      || showProjectForm
+      || showServiceForm
+      || serviceToDelete
+      || projectToDelete
+    ) {
+      return undefined;
+    }
+
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (!isEdgeDeleteKey(event) || isEditableTarget(event.target)) return;
+      event.preventDefault();
+      handleDeleteEdges(selectedEdgeIds);
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => window.removeEventListener("keydown", handleWindowKeyDown);
+  }, [
+    handleDeleteEdges,
+    projectToDelete,
+    selectedEdgeIds,
+    serviceToDelete,
+    showProjectForm,
+    showServiceForm,
+    view,
+  ]);
+
   const edges = useMemo<Array<Edge<ServiceFlowEdgeData>>>(() => (
     (topology?.edges ?? [])
       .filter((edge) => serviceNameById.has(edge.sourceServiceId) && serviceNameById.has(edge.targetServiceId))
@@ -644,15 +680,12 @@ export default function App() {
         target: edge.targetServiceId,
         type: "serviceEdge",
         deletable: true,
+        selected: selectedEdgeIds.includes(edge.id),
         data: {
           edge,
-          sourceName: serviceNameById.get(edge.sourceServiceId) ?? "Source",
-          targetName: serviceNameById.get(edge.targetServiceId) ?? "Target",
-          onEdit: (item) => handleRenameEdge(item.id),
-          onDelete: (edgeId) => handleDeleteEdges([edgeId]),
         },
       }))
-  ), [handleDeleteEdges, handleRenameEdge, serviceNameById, topology?.edges]);
+  ), [selectedEdgeIds, serviceNameById, topology?.edges]);
 
   async function handleSubmitProject(event: FormEvent) {
     event.preventDefault();
@@ -892,6 +925,8 @@ export default function App() {
                 onStopAll={() => void handleStopAll()}
                 onNodesChange={handleNodesChange}
                 onConnect={handleConnect}
+                onEdgeSelect={(edgeId) => setSelectedEdgeIds([edgeId])}
+                onClearEdgeSelection={() => setSelectedEdgeIds([])}
                 onNodeSelect={(serviceId) => setFocusedServiceId(serviceId)}
                 onDeleteEdges={handleDeleteEdges}
                 onPaneClick={() => undefined}
