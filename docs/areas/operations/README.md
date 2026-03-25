@@ -26,12 +26,15 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - Esas acciones operativas ya no dependen de un IPC abierto por defecto: la ventana `main` las obtiene mediante permisos explicitos del app manifest agrupados en el set `service-runtime`.
 - La operacion ya no vive en una tabla ancha: la UI expone acciones primarias en tarjetas compactas y un inspector lateral con tabs de `Resumen`, `Logs`, `Historial` y `Configuracion`.
 - Los accesos rapidos operativos (`detener`, `reiniciar`, carpeta, terminal, copiar puerto/comando`) quedaron visibles tanto en la lista como en el inspector para reducir cambios de contexto.
+- El sidebar izquierdo ahora expone una utilidad adicional por puerto: el usuario puede ingresar un `port`, resolver el listener TCP activo y cortar su arbol con `taskkill /T /F` sin salir del dashboard.
 - La operacion principal ahora sucede sobre nodos React Flow: `Run`, `Stop`, `Restart`, logs, shell y edicion viven tanto en el nodo como en el inspector derecho.
 - Los edges manuales del canvas no alteran todavia el runtime; en esta iteracion solo modelan relaciones visuales y contexto operativo por proyecto.
 - Tras la estabilizacion del canvas, el nodo quedo reducido a acciones runtime (`Start`, `Stop`, `Restart`) y las acciones secundarias permanecen solo en el inspector para no competir con drag ni conexiones.
 - Las acciones runtime embebidas ahora reafirman el foco del inspector antes de ejecutar `Start`, `Stop` o `Restart`, evitando clicks perdidos y arrastres accidentales sobre el nodo.
 - El overlay de conexion ahora cubre toda la tarjeta del nodo, pero el grip de drag y los botones runtime quedan aislados por encima para que conectar, mover y operar no compitan entre si.
 - La conmutacion entre nodos desde el inspector ya se resuelve con dos selects por tipo (`microservices` y `workers`), manteniendo las acciones runtime ligadas al foco actual sin llenar la rail de botones.
+- Cada `Start` o `Restart` sobre el servicio enfocado limpia el buffer visible de logs antes de la nueva corrida, evitando que el inspector mezcle la salida anterior con la actual.
+- Si un watcher deja vivo el wrapper de desarrollo pero el microservicio queda bloqueado durante bootstrap o pierde el bind del puerto, operaciones lo marca como `error` sin perder la posibilidad de `Stop` o `Restart` mientras exista PID supervisado.
 
 ## Checklist local
 - [x] `T2.1.1 | US2.1 |` Modelar la accion `Run` con feedback inmediato y estado `starting`.
@@ -53,6 +56,8 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - `SC-010`: operaciones termino de blindar botones y labels del canvas con `nodrag` y `nopan`, y alinea el foco del inspector con cualquier accion runtime disparada desde el nodo.
 - `SC-011`: operaciones compacto el switcher del inspector derecho con selects por tipo para sostener la escalabilidad visual del rail sin cambiar los contratos runtime.
 - `SC-020`: operaciones elimino el campo manual de puerto del modal de nodos y ahora refleja solo el puerto TCP real detectado tras arrancar el proceso supervisado.
+- `SC-022`: operaciones limpia el buffer visible de logs al hacer `Start` o `Restart` del servicio enfocado y deja que el rojo del nodo represente solo fallas reales del runtime, no ruido de logs.
+- `SC-023`: operaciones agrego una accion global en el sidebar para liberar un puerto ocupado; si el listener pertenece a un nodo supervisado, el supervisor tambien se limpia para no dejar estado inconsistente.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

@@ -70,7 +70,7 @@ export function ServiceCard({
 }: ServiceCardProps) {
   const isRunning = svc.status === "running";
   const isExternal = svc.status === "external";
-  const isStopped = svc.status === "stopped" || svc.status === "error";
+  const isStopped = svc.status === "stopped" || (svc.status === "error" && svc.pid == null);
 
   const [isDragOver, setIsDragOver] = useState(false);
 

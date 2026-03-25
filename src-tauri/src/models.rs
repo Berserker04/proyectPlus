@@ -185,6 +185,15 @@ pub struct ServiceActionResponse {
 
 pub type RunServiceResponse = ServiceActionResponse;
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortKillResponse {
+    pub snapshot: DashboardSnapshot,
+    pub port: u16,
+    pub killed_pids: Vec<u32>,
+    pub matched_service_ids: Vec<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Event payloads
 // ---------------------------------------------------------------------------

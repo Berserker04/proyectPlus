@@ -30,6 +30,7 @@ import {
   deleteProject,
   getProjectTopology,
   getServiceLogs,
+  killProcessOnPort,
   listenDashboardUpdates,
   listenServiceLogLine,
   loadAppSettings,
@@ -192,6 +193,7 @@ export default function App() {
   const [serviceForm, setServiceForm] = useState<ServiceFormState>(emptyServiceForm);
 
   const [settingsForm, setSettingsForm] = useState({ dashboardRefresh: "2", realtimeRefresh: "1" });
+  const [portKillValue, setPortKillValue] = useState("");
   const [serviceToDelete, setServiceToDelete] = useState<Microservice | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
@@ -254,6 +256,18 @@ export default function App() {
       addToast("error", "No fue posible cargar los logs.", String(error));
     }
   }, [addToast]);
+
+  const resetLogSnapshotForService = useCallback((serviceId: string) => {
+    setLogSnapshot((current) => {
+      if (current?.serviceId !== serviceId) return current;
+      return {
+        serviceId,
+        entries: [],
+        droppedEntries: 0,
+        lastUpdatedAt: new Date().toISOString(),
+      };
+    });
+  }, []);
 
   const syncInspectorWidth = useCallback((nextWidth?: number) => {
     const layout = graphLayoutRef.current;
@@ -580,15 +594,17 @@ export default function App() {
 
   const handleRunService = useCallback(async (service: Microservice) => {
     addToast("info", `Starting ${service.name}...`);
+    resetLogSnapshotForService(service.id);
     try {
       const response = await runService(service.id);
       setSnapshot(response.snapshot);
+      if (focusedServiceId === service.id) void loadLogsForService(service.id);
       if (response.issue) addToast("error", response.issue.message, response.issue.detail);
       else addToast("success", `${service.name} is now supervised.`);
     } catch (error) {
       addToast("error", "No fue posible iniciar el nodo.", String(error));
     }
-  }, [addToast]);
+  }, [addToast, focusedServiceId, loadLogsForService, resetLogSnapshotForService]);
 
   const handleStopService = useCallback(async (service: Microservice) => {
     addToast("info", `Stopping ${service.name}...`);
@@ -603,15 +619,17 @@ export default function App() {
 
   const handleRestartService = useCallback(async (service: Microservice) => {
     addToast("info", `Restarting ${service.name}...`);
+    resetLogSnapshotForService(service.id);
     try {
       const response = await restartService(service.id);
       setSnapshot(response.snapshot);
+      if (focusedServiceId === service.id) void loadLogsForService(service.id);
       if (response.issue) addToast("error", response.issue.message, response.issue.detail);
       else addToast("success", `${service.name} restarted.`);
     } catch (error) {
       addToast("error", "No fue posible reiniciar el nodo.", String(error));
     }
-  }, [addToast]);
+  }, [addToast, focusedServiceId, loadLogsForService, resetLogSnapshotForService]);
 
   useEffect(() => {
     const nodeLayouts = topology?.nodeLayouts ?? {};
@@ -840,7 +858,11 @@ export default function App() {
   }, [addToast, snapshot.services]);
 
   const handleStopAll = useCallback(async () => {
-    const runningServices = snapshot.services.filter((service) => service.status === "running" || service.status === "starting");
+    const runningServices = snapshot.services.filter((service) =>
+      service.status === "running"
+      || service.status === "starting"
+      || (service.status === "error" && service.pid != null),
+    );
     if (runningServices.length === 0) {
       addToast("info", "No running nodes to stop.");
       return;
@@ -856,6 +878,40 @@ export default function App() {
     }
     addToast("success", "Bulk stop finished.");
   }, [addToast, snapshot.services]);
+
+  const handleKillPort = useCallback(async () => {
+    const rawPort = portKillValue.trim();
+    const port = Number.parseInt(rawPort, 10);
+    if (!rawPort || !Number.isInteger(port) || port < 1 || port > 65535) {
+      addToast("error", "Port must be a number between 1 and 65535.");
+      return;
+    }
+
+    setIsPendingAction(true);
+    try {
+      const response = await killProcessOnPort(port);
+      setSnapshot(response.snapshot);
+      setPortKillValue("");
+
+      const detailParts: string[] = [];
+      if (response.killedPids.length > 0) {
+        detailParts.push(`PID ${response.killedPids.join(", ")}`);
+      }
+      if (response.matchedServiceIds.length > 0) {
+        detailParts.push(`${response.matchedServiceIds.length} supervised node(s) updated`);
+      }
+
+      addToast(
+        "success",
+        `Port ${response.port} released.`,
+        detailParts.length > 0 ? detailParts.join(" | ") : undefined,
+      );
+    } catch (error) {
+      addToast("error", "No fue posible matar el proceso por puerto.", String(error));
+    } finally {
+      setIsPendingAction(false);
+    }
+  }, [addToast, portKillValue]);
 
   async function handleSaveSettings(event: FormEvent) {
     event.preventDefault();
@@ -889,7 +945,10 @@ export default function App() {
         activeProjectStats={activeProjectStats}
         isPendingAction={isPendingAction}
         currentView={view}
+        portKillValue={portKillValue}
         onViewChange={setView}
+        onPortKillValueChange={setPortKillValue}
+        onKillPort={() => void handleKillPort()}
         onSelectProject={(project) => void handleSelectProject(project)}
         onEditProject={openEditProject}
         onDeleteProject={(project) => setProjectToDelete(project)}

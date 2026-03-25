@@ -19,7 +19,9 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - Los logs del MVP viviran en memoria con exportacion manual; no se incluye persistencia historica completa.
 - El supervisor lanza procesos con `stdout` y `stderr` en `pipe`, conserva un buffer circular en memoria por servicio y lo expone a la UI con polling liviano.
 - La severidad de los logs es best effort: usa palabras clave (`error`, `warn`, `debug`, `trace`) y fallback por stream (`stderr` -> `error`).
-- Cuando el buffer vivo de un servicio contiene al menos una linea `error`, el nodo del canvas entra en tono critico aunque el proceso siga `running`; la senal se limpia al vaciar logs o reiniciar el servicio.
+- La severidad de los logs colorea la lectura dentro del inspector, pero ya no fuerza el rojo del nodo por si sola; el canvas reserva el tono critico para fallas bloqueantes reales del runtime.
+- `Start` y `Restart` reinician el buffer visible del servicio enfocado para que la nueva corrida no herede el contexto visual anterior en el inspector.
+- Cuando el servicio corre bajo un watcher que deja un wrapper vivo, observabilidad combina senales de error fatal en logs con ausencia de listener TCP para detectar bootstraps caidos sin depender solo del PID del wrapper.
 - La UI ya permite buscar dentro del buffer, filtrar por stream, limpiar el buffer, pausar autoscroll y exportar un `.log` manual.
 - La observabilidad ahora se reparte entre `Resumen` e inspector de servicios: la vista ejecutiva concentra salud global, focos y hotspots, mientras logs e historial quedan dentro del contexto del servicio seleccionado.
 - El rediseño mantiene el mismo polling y fuentes de telemetria, pero mejora la jerarquia visual con cards de metricas, chips de estado y paneles de incidencias.
@@ -69,8 +71,11 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-015`: los logs JSON ahora tienen toggle por linea para alternar entre una vista compacta y otra pretty multiline, util cuando un servicio emite objetos estructurados largos.
 - `SC-017`: el polling del dashboard dejo de refrescar toda la tabla de procesos del SO; ahora limita `sysinfo` a RAM, CPU global y PIDs supervisados para evitar el crash nativo de Windows al abrir la app.
 - `SC-020`: observabilidad dejo de depender del puerto manual en la UI y ahora expone solo el puerto TCP real detectado para cada nodo supervisado.
-- `SC-019`: la severidad detectada en logs ahora tambien alimenta el tono del nodo en React Flow, incluyendo lineas `ERROR` emitidas por Nest via `stdout`, sin degradar el `status` operativo del proceso.
+- `SC-019`: introdujo la propagacion de severidad de logs hacia el canvas como senal visual inicial, incluyendo lineas `ERROR` emitidas por Nest via `stdout`, sin degradar el `status` operativo del proceso.
 - `SC-021`: observabilidad retiro las cards duplicadas de CPU/RAM del nodo y elimino los overlays placeholder de trafico en los edges, dejando la telemetria detallada solo en el inspector.
+- `SC-022`: el canvas dejo de tratar la severidad de logs o la presion alta como criterio de rojo; ahora el tono critico solo representa fallas reales del runtime, y cada `Start`/`Restart` limpia el buffer visible del inspector antes de la nueva corrida.
+- `SC-024`: el canvas vuelve a escalar a rojo cuando el buffer contiene logs criticos y deja de renderizar el bloque de error dentro del nodo; el detalle textual queda en inspector y toasts para no contaminar el grafo.
+- `SC-025`: se retiro el falso positivo visual de `SC-024`; un nodo vivo ya no entra en rojo por cualquier `ERROR` o `stderr`, y el rojo vuelve a significar fallo bloqueante real del servicio.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

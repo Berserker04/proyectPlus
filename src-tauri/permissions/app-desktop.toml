@@ -46,6 +46,7 @@ permissions = [
   "allow-restart-service",
   "allow-open-service-folder",
   "allow-open-service-terminal",
+  "allow-kill-process-on-port",
   "allow-clear-service-logs",
 ]
 

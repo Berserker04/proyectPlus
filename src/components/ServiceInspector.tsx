@@ -50,6 +50,10 @@ export function ServiceInspector(props: ServiceInspectorProps) {
   const { service } = props;
   const microservices = props.services.filter((item) => item.kind === "service");
   const workers = props.services.filter((item) => item.kind === "worker");
+  const isStopDisabled = !service
+    || service.status === "stopped"
+    || service.status === "external"
+    || (service.status === "error" && service.pid == null);
 
   return (
     <aside className="service-inspector">
@@ -137,7 +141,7 @@ export function ServiceInspector(props: ServiceInspectorProps) {
             <button type="button" className="btn-primary" onClick={() => props.onRun(service)} disabled={service.status === "running" || service.status === "external"}>
               Start
             </button>
-            <button type="button" className="btn-outline" onClick={() => props.onStop(service)} disabled={service.status === "stopped" || service.status === "error" || service.status === "external"}>
+            <button type="button" className="btn-outline" onClick={() => props.onStop(service)} disabled={isStopDisabled}>
               Stop
             </button>
             <button type="button" className="btn-outline" onClick={() => props.onRestart(service)} disabled={service.status === "external"}>

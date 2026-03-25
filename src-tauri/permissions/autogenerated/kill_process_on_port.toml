@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-kill-process-on-port"
+description = "Enables the kill_process_on_port command without any pre-configured scope."
+commands.allow = ["kill_process_on_port"]
+
+[[permission]]
+identifier = "deny-kill-process-on-port"
+description = "Denies the kill_process_on_port command without any pre-configured scope."
+commands.deny = ["kill_process_on_port"]

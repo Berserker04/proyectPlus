@@ -58,12 +58,10 @@ export function buildPressureTelemetry(service: Microservice): NodeTelemetryView
   if (service.status === "external") pressureScore = Math.max(pressureScore, 28);
   if (service.status === "stopped") pressureScore = 0;
   if (service.status === "error") pressureScore = 100;
-  if (service.hasLogError) pressureScore = Math.max(pressureScore, 95);
 
   let pressureTone: NodeTelemetryViewModel["pressureTone"] = "healthy";
   if (service.status === "stopped") pressureTone = "idle";
-  else if (service.status === "error" || service.hasLogError) pressureTone = "critical";
-  else if (pressureScore >= 90) pressureTone = "critical";
+  else if (service.status === "error") pressureTone = "critical";
   else if (pressureScore >= 75) pressureTone = "pressure";
   else if (pressureScore >= 55) pressureTone = "warning";
 

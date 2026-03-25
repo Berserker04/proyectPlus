@@ -10,8 +10,8 @@
 // ---------------------------------------------------------------------------
 
 use crate::models::{
-    RunServiceResponse, ServiceActionIssue, ServiceActionResponse, ServiceLogEntry,
-    ServiceLogLineEvent, ServiceLogSnapshot,
+    PortKillResponse, RunServiceResponse, ServiceActionIssue, ServiceActionResponse,
+    ServiceLogEntry, ServiceLogLineEvent, ServiceLogSnapshot,
 };
 use chrono::Utc;
 use std::{
@@ -45,12 +45,22 @@ pub(crate) struct ProcessEntry {
     pub log_buf: Arc<Mutex<LogBuffer>>,
 }
 
+#[derive(Clone)]
+struct BlockingSignal {
+    code: &'static str,
+    title: &'static str,
+    message: String,
+    detail: Option<String>,
+    port_conflict: bool,
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct LogBuffer {
     pub entries: Vec<ServiceLogEntry>,
     pub sequence: u64,
     pub dropped: u64,
     pub has_error: bool,
+    blocking_signal: Option<BlockingSignal>,
 }
 
 impl LogBuffer {
@@ -59,9 +69,16 @@ impl LogBuffer {
             return None;
         };
         let level = detect_log_level(stream, &message);
-        let promoted_to_error = !self.has_error && level == "error";
-        if promoted_to_error {
+        let mut notify_dashboard = false;
+        if !self.has_error && level == "error" {
             self.has_error = true;
+            notify_dashboard = true;
+        }
+        if self.blocking_signal.is_none() {
+            if let Some(signal) = detect_blocking_signal(stream, &message) {
+                self.blocking_signal = Some(signal);
+                notify_dashboard = true;
+            }
         }
         self.sequence += 1;
         if self.entries.len() >= MAX_LOG_ENTRIES {
@@ -76,7 +93,7 @@ impl LogBuffer {
             message,
         };
         self.entries.push(entry.clone());
-        Some((entry, promoted_to_error))
+        Some((entry, notify_dashboard))
     }
 }
 
@@ -131,10 +148,33 @@ pub(crate) fn get_live_status(
     let procs = supervisor.processes.lock().unwrap();
 
     if let Some(entry) = procs.get(service_id) {
-        let has_log_error = entry.log_buf.lock().map(|buf| buf.has_error).unwrap_or(false);
+        let (has_log_error, blocking_signal) = entry
+            .log_buf
+            .lock()
+            .map(|buf| (buf.has_error, buf.blocking_signal.clone()))
+            .unwrap_or((false, None));
         let pid_raw = entry.child.id();
         let pid = Pid::from_u32(pid_raw);
         if let Some(proc_info) = sys.process(pid) {
+            if let Some(signal) = blocking_signal.filter(|_| detected_port.is_none()) {
+                return LiveStatus {
+                    status: "error".to_string(),
+                    pid: Some(pid_raw),
+                    detected_port: None,
+                    cpu_percent: proc_info.cpu_usage() as f64,
+                    memory_bytes: proc_info.memory(),
+                    has_log_error,
+                    last_signal: signal.message.clone(),
+                    issue: Some(ServiceActionIssue {
+                        service_id: service_id.to_string(),
+                        code: signal.code.to_string(),
+                        title: signal.title.to_string(),
+                        message: signal.message,
+                        detail: signal.detail,
+                    }),
+                    port_conflict: signal.port_conflict,
+                };
+            }
             return LiveStatus {
                 status: "running".to_string(),
                 pid: Some(pid_raw),
@@ -219,13 +259,8 @@ pub(crate) fn resolve_supervised_ports(
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_supervised_ports_windows(
-    root_pids: &[(String, u32)],
-) -> HashMap<String, Option<u16>> {
-    let (children_by_parent, mut ports_by_pid) = query_windows_process_runtime_state();
-    if ports_by_pid.is_empty() {
-        populate_ports_from_netstat(&mut ports_by_pid);
-    }
+fn resolve_supervised_ports_windows(root_pids: &[(String, u32)]) -> HashMap<String, Option<u16>> {
+    let (children_by_parent, ports_by_pid) = load_windows_process_runtime_state();
 
     root_pids
         .iter()
@@ -239,6 +274,15 @@ fn resolve_supervised_ports_windows(
             (service_id.clone(), ports.into_iter().next())
         })
         .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn load_windows_process_runtime_state() -> (HashMap<u32, Vec<u32>>, HashMap<u32, Vec<u16>>) {
+    let (children_by_parent, mut ports_by_pid) = query_windows_process_runtime_state();
+    if ports_by_pid.is_empty() {
+        populate_ports_from_netstat(&mut ports_by_pid);
+    }
+    (children_by_parent, ports_by_pid)
 }
 
 #[cfg(target_os = "windows")]
@@ -356,6 +400,68 @@ fn parse_local_port(local_address: &str) -> Option<u16> {
         .and_then(|(_, port)| port.parse::<u16>().ok())
 }
 
+#[cfg(target_os = "windows")]
+fn listener_pids_for_port(ports_by_pid: &HashMap<u32, Vec<u16>>, port: u16) -> Vec<u32> {
+    let mut pids: Vec<u32> = ports_by_pid
+        .iter()
+        .filter_map(|(pid, ports)| ports.contains(&port).then_some(*pid))
+        .collect();
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+
+#[cfg(target_os = "windows")]
+fn supervised_service_matches_for_listener_pids(
+    supervisor: &RuntimeSupervisor,
+    children_by_parent: &HashMap<u32, Vec<u32>>,
+    listener_pids: &[u32],
+) -> (Vec<String>, HashSet<u32>) {
+    let listener_pid_set: HashSet<u32> = listener_pids.iter().copied().collect();
+    let procs = supervisor.processes.lock().unwrap();
+    let mut matched_service_ids = Vec::new();
+    let mut covered_pids = HashSet::new();
+
+    for (service_id, entry) in procs.iter() {
+        let process_tree = collect_process_tree_pids(entry.child.id(), children_by_parent);
+        if process_tree
+            .iter()
+            .any(|pid| listener_pid_set.contains(pid))
+        {
+            matched_service_ids.push(service_id.clone());
+            covered_pids.extend(process_tree);
+        }
+    }
+
+    matched_service_ids.sort();
+    matched_service_ids.dedup();
+    (matched_service_ids, covered_pids)
+}
+
+#[cfg(target_os = "windows")]
+fn kill_process_tree(pid: u32) -> Result<(), String> {
+    let output = Command::new("taskkill")
+        .args(["/F", "/T", "/PID", &pid.to_string()])
+        .output()
+        .map_err(|error| format!("failed to execute taskkill for PID {pid}: {error}"))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let detail = if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
+    } else {
+        format!("taskkill exited with status {}", output.status)
+    };
+
+    Err(format!("failed to kill PID {pid}: {detail}"))
+}
+
 pub(crate) fn refresh_system_telemetry(supervisor: &RuntimeSupervisor, sys: &mut System) {
     let pids: Vec<Pid> = {
         let procs = supervisor.processes.lock().unwrap();
@@ -428,6 +534,67 @@ fn detect_log_level(stream: &str, message: &str) -> &'static str {
         return "info";
     }
     "info"
+}
+
+fn detect_blocking_signal(stream: &str, message: &str) -> Option<BlockingSignal> {
+    let normalized = message.to_ascii_lowercase();
+
+    if normalized.contains("eaddrinuse") || normalized.contains("address already in use") {
+        return Some(BlockingSignal {
+            code: "PORT_IN_USE",
+            title: "Port busy",
+            message: message.to_string(),
+            detail: Some("The service failed to bind its listening port.".to_string()),
+            port_conflict: true,
+        });
+    }
+
+    if normalized.contains("can't resolve dependencies")
+        || normalized.contains("unknowndependenciesexception")
+    {
+        return Some(BlockingSignal {
+            code: "DEPENDENCY_RESOLUTION_FAILED",
+            title: "Nest bootstrap failed",
+            message: message.to_string(),
+            detail: Some(
+                "Nest could not resolve one or more providers required to finish startup."
+                    .to_string(),
+            ),
+            port_conflict: false,
+        });
+    }
+
+    if normalized.contains("[exceptionhandler]") {
+        let detail = if stream == "stderr" {
+            Some("Nest reported an exception during bootstrap/runtime handling.".to_string())
+        } else {
+            None
+        };
+        return Some(BlockingSignal {
+            code: "RUNTIME_EXCEPTION_HANDLER",
+            title: "Service bootstrap blocked",
+            message: message.to_string(),
+            detail,
+            port_conflict: false,
+        });
+    }
+
+    if normalized.contains("triggeruncaughtexception")
+        || normalized.contains("uncaughtexception")
+        || normalized.contains("unhandledrejection")
+    {
+        return Some(BlockingSignal {
+            code: "UNCAUGHT_RUNTIME_EXCEPTION",
+            title: "Process crashed",
+            message: message.to_string(),
+            detail: Some(
+                "The runtime raised an uncaught exception and stopped serving traffic.".to_string(),
+            ),
+            port_conflict: false,
+        });
+    }
+
+    None
 }
 
 fn sanitize_log_message(raw: &str) -> Option<String> {
@@ -614,6 +781,52 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
     }
 }
 
+#[cfg(target_os = "windows")]
+pub fn kill_process_on_port(app: &AppHandle, port: u16) -> Result<PortKillResponse, String> {
+    let (children_by_parent, ports_by_pid) = load_windows_process_runtime_state();
+    let listener_pids = listener_pids_for_port(&ports_by_pid, port);
+
+    if listener_pids.is_empty() {
+        return Err(format!("No process is listening on port {port}."));
+    }
+
+    let (matched_service_ids, covered_supervised_pids) = {
+        let supervisor = app.state::<RuntimeSupervisor>();
+        supervised_service_matches_for_listener_pids(
+            &supervisor,
+            &children_by_parent,
+            &listener_pids,
+        )
+    };
+
+    for service_id in &matched_service_ids {
+        stop_service(app, service_id)?;
+    }
+
+    for pid in listener_pids
+        .iter()
+        .copied()
+        .filter(|pid| !covered_supervised_pids.contains(pid))
+    {
+        kill_process_tree(pid)?;
+    }
+
+    let snapshot = build_snapshot(app)?;
+    emit_dashboard_update(app);
+
+    Ok(PortKillResponse {
+        snapshot,
+        port,
+        killed_pids: listener_pids,
+        matched_service_ids,
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn kill_process_on_port(_app: &AppHandle, _port: u16) -> Result<PortKillResponse, String> {
+    Err("kill_process_on_port is only available on Windows.".to_string())
+}
+
 pub fn stop_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionResponse, String> {
     let supervisor = app.state::<RuntimeSupervisor>();
     let mut procs = supervisor.processes.lock().unwrap();
@@ -621,9 +834,7 @@ pub fn stop_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionRe
         let pid = entry.child.id();
         #[cfg(target_os = "windows")]
         {
-            let _ = Command::new("taskkill")
-                .args(["/F", "/T", "/PID", &pid.to_string()])
-                .output();
+            let _ = kill_process_tree(pid);
         }
         let _ = entry.child.kill();
         let _ = entry.child.wait();
@@ -698,9 +909,7 @@ pub fn cleanup_runtime(app: &AppHandle) -> Result<(), String> {
         let pid = entry.child.id();
         #[cfg(target_os = "windows")]
         {
-            let _ = Command::new("taskkill")
-                .args(["/F", "/T", "/PID", &pid.to_string()])
-                .output();
+            let _ = kill_process_tree(pid);
         }
         let _ = entry.child.kill();
         let _ = entry.child.wait();
@@ -749,7 +958,11 @@ fn split_command(cmd: &str) -> (String, Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{detect_log_level, sanitize_log_message};
+    #[cfg(target_os = "windows")]
+    use super::listener_pids_for_port;
+    use super::{detect_blocking_signal, detect_log_level, sanitize_log_message};
+    #[cfg(target_os = "windows")]
+    use std::collections::HashMap;
 
     #[test]
     fn strips_ansi_sequences_from_log_lines() {
@@ -787,5 +1000,51 @@ mod tests {
     #[test]
     fn keeps_stderr_as_error_without_explicit_keyword() {
         assert_eq!(detect_log_level("stderr", "listen EADDRINUSE"), "error");
+    }
+
+    #[test]
+    fn detects_blocking_signal_from_exception_handler_logs() {
+        let signal = detect_blocking_signal(
+            "stderr",
+            "[Nest] 43168  - 25/03/2026, 2:57:32 p. m.   ERROR [ExceptionHandler] EXPORT_STORAGE_PATH is required",
+        )
+        .expect("expected blocking signal");
+
+        assert_eq!(signal.code, "RUNTIME_EXCEPTION_HANDLER");
+        assert!(!signal.port_conflict);
+    }
+
+    #[test]
+    fn detects_dependency_resolution_failures_as_blocking() {
+        let signal = detect_blocking_signal(
+            "stderr",
+            "UnknownDependenciesException [Error]: Nest can't resolve dependencies of the PrismaService (?)",
+        )
+        .expect("expected blocking signal");
+
+        assert_eq!(signal.code, "DEPENDENCY_RESOLUTION_FAILED");
+    }
+
+    #[test]
+    fn detects_eaddrinuse_as_port_conflict() {
+        let signal = detect_blocking_signal(
+            "stderr",
+            "Error: listen EADDRINUSE: address already in use :::3012",
+        )
+        .expect("expected blocking signal");
+
+        assert_eq!(signal.code, "PORT_IN_USE");
+        assert!(signal.port_conflict);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn resolves_listener_pids_for_a_port() {
+        let mut ports_by_pid = HashMap::new();
+        ports_by_pid.insert(101, vec![3000, 4000]);
+        ports_by_pid.insert(202, vec![4000]);
+        ports_by_pid.insert(303, vec![8080]);
+
+        assert_eq!(listener_pids_for_port(&ports_by_pid, 4000), vec![101, 202]);
     }
 }

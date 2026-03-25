@@ -17,8 +17,8 @@ pub use db::{
     update_service_order,
 };
 pub use runtime::{
-    cleanup_runtime, clear_service_logs, get_service_logs, restart_service, run_service,
-    stop_service, RuntimeSupervisor, TelemetryCache,
+    cleanup_runtime, clear_service_logs, get_service_logs, kill_process_on_port, restart_service,
+    run_service, stop_service, RuntimeSupervisor, TelemetryCache,
 };
 // Eventos push
 pub use events::{start_background_ticker, RefreshConfig};

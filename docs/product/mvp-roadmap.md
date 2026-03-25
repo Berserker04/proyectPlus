@@ -164,5 +164,9 @@ Definition of done:
 - [x] `SC-019 | observability, ui |` Propagar severidad de logs al canvas: si el buffer actual del servicio detecta una linea `error` por palabra clave o `stderr`, el nodo entra en tono critico sin alterar el `status` operativo del proceso; limpiar logs o reiniciar el servicio quita esa senal.
 - [x] `SC-020 | discovery, operations, observability |` Retirar el campo manual de `Puerto esperado` del alta/edicion de nodos y autodetectar en runtime el puerto TCP real que abre el arbol del proceso supervisado.
 - [x] `SC-021 | discovery, observability |` Simplificar la superficie del canvas: retirar CPU/RAM duplicados de los nodos, eliminar overlays placeholder de trafico en los edges y permitir borrar un enlace seleccionado con `Suprimir/Delete`.
+- [x] `SC-022 | operations, observability, ui |` Reservar el rojo del nodo para fallas operativas reales del runtime y limpiar el buffer visible de logs cada vez que un servicio enfocado se inicia o reinicia.
+- [x] `SC-023 | operations, ui |` Agregar en el menu izquierdo una herramienta de puerto que reciba un `port`, resuelva el listener TCP en Windows, mate su arbol de procesos con `taskkill /T /F` y resincronice cualquier nodo supervisado afectado.
+- [x] `SC-024 | observability, ui |` Volver a propagar logs criticos al canvas aunque el wrapper siga vivo y retirar el bloque de error embebido dentro de cada nodo, dejando el detalle solo en el inspector/toasts.
+- [x] `SC-025 | observability, ui |` Limitar el rojo del canvas a fallas bloqueantes reales: un nodo `running` ya no entra en critico por cualquier log `ERROR` o `stderr`; solo por `status=error` o por una falla de arranque que deje al runtime sin listener operativo.
 - Plantilla de registro:
   - [ ] `SC-001 | area |` Descripcion del cambio detectado, razon, impacto en historias y docs afectados.

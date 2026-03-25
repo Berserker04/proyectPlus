@@ -222,6 +222,22 @@ body {
   font-size: 12px;
 }
 
+.sidebar-port-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 0 8px 10px;
+}
+
+.sidebar-port-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.sidebar-port-button {
+  padding-inline: 12px;
+}
+
 .sidebar-footer {
   padding: 12px 14px;
   border-top: 1px solid var(--border);

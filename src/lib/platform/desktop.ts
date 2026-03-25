@@ -2,6 +2,7 @@ import type {
   AppSettings,
   DashboardSnapshot,
   MicroserviceDraft,
+  PortKillResponse,
   ProjectTopology,
   ProjectDraft,
   RunServiceResponse,
@@ -167,6 +168,11 @@ export async function openServiceTerminal(serviceId: string): Promise<void> {
 export async function updateServiceOrder(projectId: string, serviceIds: string[]): Promise<DashboardSnapshot> {
   if (!isTauriRuntime()) throw new Error("Solo disponible en la app de escritorio.");
   return invokeDesktop<DashboardSnapshot>("update_service_order", { projectId, serviceIds });
+}
+
+export async function killProcessOnPort(port: number): Promise<PortKillResponse> {
+  if (!isTauriRuntime()) throw new Error("Solo disponible en la app de escritorio.");
+  return invokeDesktop<PortKillResponse>("kill_process_on_port", { port });
 }
 
 // ---------------------------------------------------------------------------

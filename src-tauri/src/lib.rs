@@ -4,8 +4,8 @@ mod storage;
 use tauri::{AppHandle, RunEvent};
 
 use models::{
-    AppSettings, DashboardSnapshot, MicroserviceDraft, ProjectDraft, ProjectTopology,
-    RunServiceResponse, ServiceActionResponse, ServiceLogSnapshot,
+    AppSettings, DashboardSnapshot, MicroserviceDraft, PortKillResponse, ProjectDraft,
+    ProjectTopology, RunServiceResponse, ServiceActionResponse, ServiceLogSnapshot,
 };
 
 // ---------------------------------------------------------------------------
@@ -151,6 +151,11 @@ fn open_service_terminal(app: AppHandle, service_id: String) -> Result<(), Strin
 }
 
 #[tauri::command]
+fn kill_process_on_port(app: AppHandle, port: u16) -> Result<PortKillResponse, String> {
+    storage::kill_process_on_port(&app, port).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn select_directory() -> Result<Option<String>, String> {
     Ok(rfd::FileDialog::new()
         .pick_folder()
@@ -187,6 +192,7 @@ pub fn run() {
             clear_service_logs,
             open_service_folder,
             open_service_terminal,
+            kill_process_on_port,
             select_directory,
         ])
         .build(tauri::generate_context!())

@@ -536,3 +536,86 @@ Dependencias:
 
 Trazabilidad:
 - Roadmap: `SC-021`
+
+### [x] SC-022 - Estado critico real y reset de logs por corrida
+Objetivo: evitar falsos rojos en el canvas y hacer que cada arranque o reinicio arranque con contexto de logs limpio.
+
+Estado actual:
+- El tono rojo del nodo ya no depende de palabras clave ni de `stderr`; queda reservado para fallas operativas reales (`status=error`).
+- La presion por CPU o RAM sigue visible como senal intermedia del nodo, pero ya no escala a rojo por si sola.
+- Cuando el usuario hace `Start` o `Restart` sobre el servicio enfocado, el inspector limpia el buffer visible y se resincroniza con la nueva corrida.
+- En servicios lanzados con wrappers tipo `nest start --watch`, un error fatal de bootstrap o bind (`ExceptionHandler`, dependencias no resueltas, `EADDRINUSE`, uncaught exception) puede marcar el nodo en rojo aunque el wrapper siga vivo, siempre que el runtime quede sin puerto/listener operativo.
+
+Criterios de aceptacion:
+- Un servicio `running` con logs que contengan `ERROR` o salidas por `stderr` no se pinta rojo si sigue operativo.
+- Un servicio solo entra en rojo cuando el runtime detecta una falla real y lo deja en `error`.
+- El inspector de logs no mezcla la corrida nueva con el buffer visible anterior tras `Start` o `Restart`.
+- Si el wrapper del watcher sigue vivo pero el bootstrap real falla y el servicio no queda escuchando, el nodo tambien entra en rojo y conserva acciones para detener o reiniciar.
+
+Dependencias:
+- `US2.1`
+- `US2.2`
+- `US3.3`
+
+Trazabilidad:
+- Roadmap: `SC-022`
+
+### [x] SC-023 - Liberar puertos ocupados desde el sidebar
+Objetivo: resolver rapido conflictos locales de puerto sin salir de la app ni buscar el PID manualmente.
+
+Estado actual:
+- El menu izquierdo ya incluye un bloque para ingresar un puerto y disparar la accion.
+- El backend resuelve el PID listener en Windows y ejecuta `taskkill /T /F` sobre el arbol asociado.
+- Si el puerto pertenece a un nodo supervisado por la app, la supervision se resincroniza para no dejar estados stale.
+
+Criterios de aceptacion:
+- El usuario puede ingresar un puerto valido desde el sidebar y matar el proceso que escucha en ese puerto.
+- Si el proceso corresponde a un servicio supervisado, el dashboard deja de mostrarlo como corriendo de forma stale.
+- Si no existe un listener en ese puerto o el kill falla, la app muestra un error claro.
+
+Dependencias:
+- `US2.2`
+- `US2.3`
+
+Trazabilidad:
+- Roadmap: `SC-023`
+
+### [x] SC-024 - Senal critica por logs y nodo sin error inline
+Objetivo: volver a hacer visible en el canvas cuando un servicio sigue vivo pero ya emitio fallos criticos, sin llenar el nodo con texto de error.
+
+Estado actual:
+- El tono rojo del nodo vuelve a activarse cuando el buffer del servicio ya contiene logs de nivel `error`, incluso si el wrapper del watcher sigue vivo y el runtime aun no cae a `status=error`.
+- Mensajes como `Cannot find module .../dist/main` vuelven accionable el problema desde el canvas sin exigir que el proceso muera primero.
+- El bloque de error textual deja de renderizarse dentro del nodo; el detalle queda en el inspector derecho y en los toasts operativos.
+
+Criterios de aceptacion:
+- Un log critico por `stderr` o por palabras clave de error pinta el nodo en rojo aunque el servicio siga en `running`.
+- El nodo del canvas ya no muestra tarjetas o bloques con el mensaje completo del error.
+- El usuario conserva el detalle del fallo fuera del nodo, en el inspector y feedback operativo de la app.
+
+Dependencias:
+- `US3.3`
+- `SC-022`
+
+Trazabilidad:
+- Roadmap: `SC-024`
+
+### [x] SC-025 - Rojo solo para fallas bloqueantes reales
+Objetivo: evitar falsos positivos visuales cuando un microservicio sigue operativo pero emite logs `ERROR` esperables de negocio o peticiones rechazadas.
+
+Estado actual:
+- Un nodo `running` ya no se pinta rojo solo porque el buffer contenga lineas `ERROR` o `stderr`.
+- El rojo del canvas vuelve a quedar reservado para `status=error` o para fallas de bootstrap realmente bloqueantes detectadas por runtime cuando el proceso no queda escuchando.
+- La severidad de logs se conserva en el inspector derecho para diagnostico, sin degradar el estado visual del nodo por errores no bloqueantes.
+
+Criterios de aceptacion:
+- Un servicio que responde y mantiene listener operativo no entra en rojo por logs 4xx/5xx, `stderr` o mensajes de nivel `error` aislados.
+- Un servicio solo entra en rojo cuando su estado operativo cae a error o cuando el arranque falla de forma bloqueante.
+- El detalle de severidad sigue visible en el inspector y en la lectura de logs.
+
+Dependencias:
+- `US3.3`
+- `SC-022`
+
+Trazabilidad:
+- Roadmap: `SC-025`

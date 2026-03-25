@@ -150,6 +150,13 @@ export interface ServiceActionResponse {
 
 export type RunServiceResponse = ServiceActionResponse;
 
+export interface PortKillResponse {
+  snapshot: DashboardSnapshot;
+  port: number;
+  killedPids: number[];
+  matchedServiceIds: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Event payloads
 // ---------------------------------------------------------------------------

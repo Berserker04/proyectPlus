@@ -13,7 +13,10 @@ interface ProjectSidebarProps {
   activeProjectStats: ProjectStats;
   isPendingAction: boolean;
   currentView: "graph" | "settings";
+  portKillValue: string;
   onViewChange: (view: "graph" | "settings") => void;
+  onPortKillValueChange: (value: string) => void;
+  onKillPort: () => void;
   onSelectProject: (project: Project) => void;
   onEditProject: (project: Project) => void;
   onDeleteProject: (project: Project) => void;
@@ -93,6 +96,34 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       >
         + New project
       </button>
+
+      <div className="sidebar-section-label">Port tools</div>
+      <form
+        className="sidebar-port-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          props.onKillPort();
+        }}
+      >
+        <input
+          className="field-input sidebar-port-input"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={65535}
+          placeholder="Port"
+          value={props.portKillValue}
+          onChange={(event) => props.onPortKillValueChange(event.target.value)}
+          disabled={props.isPendingAction}
+        />
+        <button
+          className="btn-outline danger sidebar-port-button"
+          type="submit"
+          disabled={props.isPendingAction || props.portKillValue.trim().length === 0}
+        >
+          Kill
+        </button>
+      </form>
 
       <div className="sidebar-footer">
         <div className="metric-row">

@@ -20,10 +20,10 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
   const { service } = data;
   const telemetry = data.telemetry ?? buildPressureTelemetry(service);
   const port = service.detectedPort;
-  const isStopped = service.status === "stopped" || service.status === "error";
+  const isStopped = service.status === "stopped" || (service.status === "error" && service.pid == null);
   const isRunning = service.status === "running";
   const isExternal = service.status === "external";
-  const pressureLabel = telemetry.hasLogError ? "Log error" : getPressureLabel(telemetry.pressureTone);
+  const pressureLabel = getPressureLabel(telemetry.pressureTone);
 
   return (
     <div className={`flow-node flow-node-${telemetry.pressureTone}${selected ? " is-selected" : ""}`}>
@@ -72,13 +72,6 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
           <span>PID {service.pid ?? "N/A"}</span>
           <span>{pressureLabel}</span>
         </div>
-
-        {service.issue && (
-          <div className="flow-node-issue">
-            <strong>{service.issue.title}</strong>
-            <span>{service.issue.message}</span>
-          </div>
-        )}
 
         <div className="flow-node-actions">
           <div className="flow-node-runtime">
