@@ -31,7 +31,6 @@ fn main() {
             "open_service_folder",
             "open_service_terminal",
             "select_directory",
-            "check_port_in_use",
         ]),
     ))
     .expect("failed to build tauri application manifest");

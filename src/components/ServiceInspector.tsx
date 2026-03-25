@@ -117,7 +117,7 @@ export function ServiceInspector(props: ServiceInspectorProps) {
           <div className="inspector-summary">
             <div className="inspector-summary-card">
               <span>Port</span>
-              <strong>{service.detectedPort ?? service.expectedPort ?? "N/A"}</strong>
+              <strong>{service.detectedPort ?? "N/A"}</strong>
             </div>
             <div className="inspector-summary-card">
               <span>CPU</span>

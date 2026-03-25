@@ -15,6 +15,7 @@ import { applyNodeChanges, type Connection, type Edge, type Node, type NodeChang
 import type {
   AppSettings,
   DashboardSnapshot,
+  MicroserviceDraft,
   Microservice,
   Project,
   ProjectTopology,
@@ -22,7 +23,6 @@ import type {
   ServiceNodeLayout,
 } from "@/lib/domain/models";
 import {
-  checkPortInUse,
   clearServiceLogs,
   createMicroservice,
   createProject,
@@ -180,7 +180,6 @@ export default function App() {
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [editingService, setEditingService] = useState<Microservice | null>(null);
   const [serviceForm, setServiceForm] = useState<ServiceFormState>(emptyServiceForm);
-  const [portWarning, setPortWarning] = useState<string | null>(null);
 
   const [settingsForm, setSettingsForm] = useState({ dashboardRefresh: "2", realtimeRefresh: "1" });
   const [serviceToDelete, setServiceToDelete] = useState<Microservice | null>(null);
@@ -579,10 +578,6 @@ export default function App() {
   }, [topology?.edges, updateTopology]);
 
   const handleRunService = useCallback(async (service: Microservice) => {
-    if (service.expectedPort) {
-      const inUse = await checkPortInUse(service.expectedPort).catch(() => false);
-      if (inUse) addToast("error", `Port ${service.expectedPort} is already in use.`, "The node may fail to start.");
-    }
     addToast("info", `Starting ${service.name}...`);
     try {
       const response = await runService(service.id);
@@ -713,30 +708,15 @@ export default function App() {
     }
   }
 
-  const checkPortWarning = useCallback(async (portRaw: string) => {
-    const port = portRaw ? Number.parseInt(portRaw, 10) : null;
-    if (!port) {
-      setPortWarning(null);
-      return;
-    }
-    try {
-      const inUse = await checkPortInUse(port);
-      setPortWarning(inUse ? `Port ${port} is already in use.` : null);
-    } catch {
-      setPortWarning(null);
-    }
-  }, []);
-
   async function handleSubmitService(event: FormEvent) {
     event.preventDefault();
     if (!activeProject) return;
-    const draft = {
+    const draft: MicroserviceDraft = {
       projectId: activeProject.id,
       kind: serviceForm.kind,
       name: serviceForm.name.trim(),
       workingDirectory: serviceForm.workingDirectory.trim(),
       startCommand: serviceForm.startCommand.trim(),
-      expectedPort: serviceForm.expectedPort.trim() ? Number(serviceForm.expectedPort.trim()) : null,
     };
     setIsPendingAction(true);
     try {
@@ -747,7 +727,6 @@ export default function App() {
       setShowServiceForm(false);
       setEditingService(null);
       setServiceForm(emptyServiceForm);
-      setPortWarning(null);
       addToast("success", editingService ? "Node updated." : "Node created.");
     } catch (error) {
       addToast("error", "No fue posible guardar el nodo.", String(error));
@@ -763,7 +742,6 @@ export default function App() {
       name: service.name,
       workingDirectory: service.workingDirectory,
       startCommand: service.startCommand,
-      expectedPort: service.expectedPort != null ? String(service.expectedPort) : "",
     });
     setShowServiceForm(true);
   }
@@ -993,10 +971,8 @@ export default function App() {
         <ServiceForm
           editingService={editingService}
           serviceForm={serviceForm}
-          portWarning={portWarning}
           isPendingAction={isPendingAction}
           onChangeField={(field, value) => setServiceForm((current) => ({ ...current, [field]: value }))}
-          onPortBlur={(port) => void checkPortWarning(port)}
           onBrowseDirectory={async () => {
             try {
               const directory = await openDirectoryDialog();
@@ -1012,7 +988,6 @@ export default function App() {
             setShowServiceForm(false);
             setEditingService(null);
             setServiceForm(emptyServiceForm);
-            setPortWarning(null);
           }}
         />
       )}

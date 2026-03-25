@@ -157,11 +157,6 @@ fn select_directory() -> Result<Option<String>, String> {
         .map(|path| path.to_string_lossy().to_string()))
 }
 
-#[tauri::command]
-fn check_port_in_use(port: u16) -> Result<bool, String> {
-    Ok(storage::is_port_open(port))
-}
-
 // ---------------------------------------------------------------------------
 // App entry point
 // ---------------------------------------------------------------------------
@@ -193,7 +188,6 @@ pub fn run() {
             open_service_folder,
             open_service_terminal,
             select_directory,
-            check_port_in_use,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

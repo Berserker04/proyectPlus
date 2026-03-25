@@ -12,18 +12,20 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 ## Decisiones actuales
 - En Windows, la app consulta CPU, RAM y procesos mediante telemetria del SO via `PowerShell`/`CIM`, sin agregar dependencias nuevas al core.
 - El dashboard refresca el snapshot cada 2 segundos y acelera a 1 segundo mientras algun servicio esta en `starting`.
-- El puerto visible usa el puerto detectado por el supervisor y, si falta, cae al `expectedPort` cuando el socket esta realmente escuchando.
+- El puerto visible de nodos supervisados se autodetecta inspeccionando el arbol del proceso y sus listeners TCP locales en Windows; `expectedPort` queda solo como compatibilidad para detectar procesos externos heredados.
 - La capa GPU del MVP es `best effort`: intenta usar `nvidia-smi` desde `PATH` o desde la instalacion tipica de NVIDIA en Windows.
 - GPU global se calcula solo cuando `nvidia-smi` devuelve datos confiables; en ese caso se expone el promedio de utilizacion de las GPUs visibles.
 - GPU por proceso se cruza por PID usando `nvidia-smi pmon` y memoria de `compute-apps`; si el driver, el modo del dispositivo o el vendor no lo soportan, la UI muestra `Not available`.
 - Los logs del MVP viviran en memoria con exportacion manual; no se incluye persistencia historica completa.
 - El supervisor lanza procesos con `stdout` y `stderr` en `pipe`, conserva un buffer circular en memoria por servicio y lo expone a la UI con polling liviano.
 - La severidad de los logs es best effort: usa palabras clave (`error`, `warn`, `debug`, `trace`) y fallback por stream (`stderr` -> `error`).
+- Cuando el buffer vivo de un servicio contiene al menos una linea `error`, el nodo del canvas entra en tono critico aunque el proceso siga `running`; la senal se limpia al vaciar logs o reiniciar el servicio.
 - La UI ya permite buscar dentro del buffer, filtrar por stream, limpiar el buffer, pausar autoscroll y exportar un `.log` manual.
 - La observabilidad ahora se reparte entre `Resumen` e inspector de servicios: la vista ejecutiva concentra salud global, focos y hotspots, mientras logs e historial quedan dentro del contexto del servicio seleccionado.
 - El rediseño mantiene el mismo polling y fuentes de telemetria, pero mejora la jerarquia visual con cards de metricas, chips de estado y paneles de incidencias.
 
 - La telemetria del dashboard ahora se sirve desde una cache por ciclo de refresh para evitar repetir `PowerShell`, GPU y probes de puerto cuando el snapshot sigue fresco.
+- La cache compartida de `sysinfo` ya no usa `refresh_all()` en cada tick: refresca RAM, CPU global y solo los PIDs que la app supervisa, evitando scans completos de procesos en Windows durante el arranque.
 - Logs e historial del inspector ya se cargan y refrescan solo en la pestana visible, y el autoscroll continuo usa bottom-lock inmediato para no encadenar animaciones.
 
 - La UI principal ahora renderiza observabilidad dentro de nodos React Flow: el estado visual combina status, CPU y RAM en una sola senal de presion por nodo.
@@ -64,6 +66,9 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-013`: los logs en vivo ahora eliminan secuencias ANSI y otros controles de terminal antes de renderizarse, evitando basura visual al capturar salidas coloreadas como `nest start --watch`.
 - `SC-014`: observabilidad ahora muestra el prefijo de logs en hora local, deja alternar manualmente la visibilidad de `hora + stream` y aplica resaltado semantico para que Nest, rutas y JSON se lean mas rapido.
 - `SC-015`: los logs JSON ahora tienen toggle por linea para alternar entre una vista compacta y otra pretty multiline, util cuando un servicio emite objetos estructurados largos.
+- `SC-017`: el polling del dashboard dejo de refrescar toda la tabla de procesos del SO; ahora limita `sysinfo` a RAM, CPU global y PIDs supervisados para evitar el crash nativo de Windows al abrir la app.
+- `SC-020`: observabilidad dejo de depender del puerto manual en la UI y ahora expone solo el puerto TCP real detectado para cada nodo supervisado.
+- `SC-019`: la severidad detectada en logs ahora tambien alimenta el tono del nodo en React Flow, incluyendo lineas `ERROR` emitidas por Nest via `stdout`, sin degradar el `status` operativo del proceso.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

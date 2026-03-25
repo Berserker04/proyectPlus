@@ -47,6 +47,9 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - La plataforma expone comandos Tauri dedicados para leer y guardar topologia por proyecto, manteniendo el snapshot runtime separado de esa capa visual.
 - La capability `default` de desktop ahora referencia el set `desktop-main` y vuelve a incluir permisos para topologia (`get/save_project_topology`) y eventos core (`core:event:default`) necesarios para logs y refresh reactivos.
 - `SC-010` no abre nuevos contratos backend: la topologia y permisos existentes se mantienen, mientras el frontend endurece la interaccion usando `focusedServiceId` como fuente de verdad del canvas.
+- `tauri:dev` ahora arranca via `scripts/tauri-dev.mjs`: limpia `ms-control-center.exe` huerfanos del repo, valida colisiones en `127.0.0.1:1420` y fuerza `RUST_BACKTRACE=1` para que los fallos nativos de desktop queden diagnosticables.
+- Ese wrapper ahora tambien inspecciona el arbol `shell/cmd/npm/tauri/vite` alrededor del listener de `1420` y usa `taskkill /T /F` para cortar sesiones repo-locales stale sin confundirlas con procesos ajenos.
+- `TelemetryCache` ahora se inicializa con RAM y CPU global, y el refresh periodico del dashboard solo actualiza PIDs supervisados; esto evita que el shell desktop haga scans completos de procesos al arrancar en Windows.
 
 ## Checklist local
 - [x] `T5.1.1 | US5.1 |` Definir esquema SQLite para `Workspace`, `Service`, `ProcessInstance`, `K6Script` y `K6Run`.
@@ -70,6 +73,9 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - `SC-008`: la plataforma ahora persiste topologia React Flow por proyecto y extiende el contrato de `microservice` con `kind` y metadata visual.
 - `SC-009`: se alinearon build manifest, permissions y capabilities para exponer topologia y eventos en vivo sin errores `not allowed` en la shell desktop.
 - `SC-010`: no hubo cambios de schema ni de IPC; la plataforma sostiene el mismo contrato de topologia mientras el frontend completa el hardening de seleccion y drag en el canvas.
+- `SC-016`: el launcher de desarrollo desktop ahora endurece el arranque local limpiando procesos huerfanos del repo, diagnosticando conflictos del puerto `1420` y forzando `RUST_BACKTRACE=1`.
+- `SC-017`: la plataforma acoto el uso de `sysinfo` del dashboard para que el proceso desktop no intente cargar toda la tabla de procesos del SO durante el arranque local en Windows.
+- `SC-018`: el launcher ahora tambien resuelve listeners `1420` que quedaron colgados detras de wrappers `shell/cmd/npm/tauri/vite`, cerrando el arbol repo-local completo antes de relanzar.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

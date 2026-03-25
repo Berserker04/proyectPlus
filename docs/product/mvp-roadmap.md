@@ -47,7 +47,7 @@ Dependencias de epica:
 Definition of done:
 - La UI puede iniciar, detener y reiniciar servicios supervisados.
 - La app puede abrir recursos operativos asociados al servicio.
-- Los conflictos de arranque y puertos se comunican de forma clara.
+- Los conflictos de arranque y el puerto visible del servicio se comunican de forma clara.
 
 ### [x] US2.1 - Iniciar servicios desde la UI
 - [x] `T2.1.1 | US2.1 |` Modelar la accion `Run` con feedback inmediato y estado `starting`.
@@ -62,7 +62,7 @@ Definition of done:
 ### [x] US2.3 - Ejecutar acciones operativas rapidas y manejar conflictos
 - [x] `T2.3.1 | US2.3 |` Implementar `Open folder` y `Open terminal in folder`.
 - [x] `T2.3.2 | US2.3 |` Implementar `Copy port` y `Copy command`.
-- [x] `T2.3.3 | US2.3 |` Advertir puertos ocupados y enlazar la apertura de logs desde la UI.
+- [x] `T2.3.3 | US2.3 |` Resolver el puerto visible del servicio en runtime y enlazar la apertura de logs desde la UI.
 
 ## E3 - Observabilidad local
 Dependencias de epica:
@@ -158,5 +158,10 @@ Definition of done:
 - [x] `SC-013 | observability |` Sanitizar los logs capturados antes de renderizarlos: remover secuencias ANSI/CSI/OSC, retornos de carro inline y otros caracteres de control para que la salida en la app refleje texto limpio equivalente a una terminal.
 - [x] `SC-014 | observability, ui |` Mejorar la lectura de logs en la rail derecha: usar hora local para el prefijo, permitir ocultar o mostrar manualmente los metadatos (`hora + stream`) y colorear semantica util como contexto Nest, rutas HTTP, duraciones y lineas JSON.
 - [x] `SC-015 | observability, ui |` Permitir expandir o colapsar por linea los logs JSON dentro del inspector, manteniendo vista compacta por defecto y una vista pretty multiline cuando el usuario necesite inspeccionar payloads estructurados.
+- [x] `SC-016 | platform-persistence |` Endurecer el launcher `tauri:dev` con un wrapper repo-local que limpia binarios desktop huerfanos del proyecto, valida colisiones en el puerto `1420` y fuerza `RUST_BACKTRACE=1` para volver diagnosticables los fallos nativos durante desarrollo.
+- [x] `SC-017 | observability, platform-persistence |` Acotar el refresh de `sysinfo` del dashboard a RAM, CPU global y PIDs supervisados para evitar OOM nativo en Windows al arrancar `ms-control-center.exe`.
+- [x] `SC-018 | platform-persistence |` Robustecer la limpieza de `tauri:dev` para detectar wrappers `shell/cmd/npm/tauri/vite` del mismo arbol repo-local y cerrar la arborescencia completa con `taskkill /T` cuando el puerto `1420` queda tomado por una sesion rota.
+- [x] `SC-019 | observability, ui |` Propagar severidad de logs al canvas: si el buffer actual del servicio detecta una linea `error` por palabra clave o `stderr`, el nodo entra en tono critico sin alterar el `status` operativo del proceso; limpiar logs o reiniciar el servicio quita esa senal.
+- [x] `SC-020 | discovery, operations, observability |` Retirar el campo manual de `Puerto esperado` del alta/edicion de nodos y autodetectar en runtime el puerto TCP real que abre el arbol del proceso supervisado.
 - Plantilla de registro:
   - [ ] `SC-001 | area |` Descripcion del cambio detectado, razon, impacto en historias y docs afectados.

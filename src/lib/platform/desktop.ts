@@ -164,11 +164,6 @@ export async function openServiceTerminal(serviceId: string): Promise<void> {
   return invokeDesktop<void>("open_service_terminal", { serviceId });
 }
 
-export async function checkPortInUse(port: number): Promise<boolean> {
-  if (!isTauriRuntime()) return false;
-  return invokeDesktop<boolean>("check_port_in_use", { port });
-}
-
 export async function updateServiceOrder(projectId: string, serviceIds: string[]): Promise<DashboardSnapshot> {
   if (!isTauriRuntime()) throw new Error("Solo disponible en la app de escritorio.");
   return invokeDesktop<DashboardSnapshot>("update_service_order", { projectId, serviceIds });

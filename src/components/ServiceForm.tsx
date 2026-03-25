@@ -7,7 +7,6 @@ export type ServiceFormState = {
   name: string;
   workingDirectory: string;
   startCommand: string;
-  expectedPort: string;
 };
 
 export const emptyServiceForm: ServiceFormState = {
@@ -15,16 +14,13 @@ export const emptyServiceForm: ServiceFormState = {
   name: "",
   workingDirectory: "",
   startCommand: "",
-  expectedPort: "",
 };
 
 interface ServiceFormProps {
   editingService: Microservice | null;
   serviceForm: ServiceFormState;
-  portWarning: string | null;
   isPendingAction: boolean;
   onChangeField: (field: keyof ServiceFormState, value: string) => void;
-  onPortBlur: (port: string) => void;
   onBrowseDirectory: () => void;
   onSubmit: (e: FormEvent) => void;
   onClose: () => void;
@@ -33,10 +29,8 @@ interface ServiceFormProps {
 export function ServiceForm({
   editingService,
   serviceForm,
-  portWarning,
   isPendingAction,
   onChangeField,
-  onPortBlur,
   onBrowseDirectory,
   onSubmit,
   onClose,
@@ -75,7 +69,7 @@ export function ServiceForm({
             <input
               className="field-input"
               style={{ flex: 1 }}
-              placeholder="C:\proyectos\api-gateway"
+              placeholder="C:\\proyectos\\api-gateway"
               value={serviceForm.workingDirectory}
               onChange={(e) => onChangeField("workingDirectory", e.target.value)}
               required
@@ -86,7 +80,7 @@ export function ServiceForm({
               onClick={onBrowseDirectory}
               title="Seleccionar carpeta"
             >
-              📁 Examinar...
+              Examinar...
             </button>
           </div>
         </div>
@@ -99,22 +93,6 @@ export function ServiceForm({
             onChange={(e) => onChangeField("startCommand", e.target.value)}
             required
           />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Puerto esperado (opcional)</label>
-          <input
-            className="field-input"
-            type="number"
-            placeholder="3000"
-            value={serviceForm.expectedPort}
-            onChange={(e) => onChangeField("expectedPort", e.target.value)}
-            onBlur={(e) => onPortBlur(e.target.value)}
-          />
-          {portWarning && (
-            <span style={{ color: "var(--warning)", fontSize: "11px", marginTop: "2px" }}>
-              ⚠️ {portWarning}
-            </span>
-          )}
         </div>
         <div className="modal-actions">
           <button type="button" className="btn-outline" onClick={onClose}>Cancelar</button>

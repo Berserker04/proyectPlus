@@ -15,7 +15,7 @@ use crate::models::{
 };
 use chrono::Utc;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet, VecDeque},
     io::{BufRead, BufReader},
     iter::Peekable,
     process::{Child, Command, Stdio},
@@ -23,7 +23,7 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::db::{build_snapshot, open_db};
@@ -50,26 +50,33 @@ pub(crate) struct LogBuffer {
     pub entries: Vec<ServiceLogEntry>,
     pub sequence: u64,
     pub dropped: u64,
+    pub has_error: bool,
 }
 
 impl LogBuffer {
-    pub fn append(&mut self, stream: &str, message: String) {
+    pub fn append(&mut self, stream: &str, message: String) -> Option<(ServiceLogEntry, bool)> {
         let Some(message) = sanitize_log_message(&message) else {
-            return;
+            return None;
         };
+        let level = detect_log_level(stream, &message);
+        let promoted_to_error = !self.has_error && level == "error";
+        if promoted_to_error {
+            self.has_error = true;
+        }
         self.sequence += 1;
         if self.entries.len() >= MAX_LOG_ENTRIES {
             self.entries.remove(0);
             self.dropped += 1;
         }
-        let level = if stream == "stderr" { "error" } else { "info" };
-        self.entries.push(ServiceLogEntry {
+        let entry = ServiceLogEntry {
             sequence: self.sequence,
             timestamp: Utc::now().to_rfc3339(),
             stream: stream.to_string(),
             level: level.to_string(),
             message,
-        });
+        };
+        self.entries.push(entry.clone());
+        Some((entry, promoted_to_error))
     }
 }
 
@@ -80,9 +87,20 @@ pub struct RuntimeSupervisor {
 }
 
 /// Cache de métricas del sistema (sysinfo::System) compartido entre polls.
-#[derive(Default)]
 pub struct TelemetryCache {
     pub(crate) system: Mutex<System>,
+}
+
+impl Default for TelemetryCache {
+    fn default() -> Self {
+        let mut system = System::new();
+        system.refresh_memory();
+        // Prime CPU counters once so the next poll can compute a stable usage delta.
+        system.refresh_cpu_all();
+        Self {
+            system: Mutex::new(system),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +113,7 @@ pub(crate) struct LiveStatus {
     pub detected_port: Option<u16>,
     pub cpu_percent: f64,
     pub memory_bytes: u64,
+    pub has_log_error: bool,
     pub last_signal: String,
     pub issue: Option<crate::models::ServiceActionIssue>,
     pub port_conflict: bool,
@@ -105,21 +124,24 @@ pub(crate) struct LiveStatus {
 pub(crate) fn get_live_status(
     service_id: &str,
     expected_port: Option<u16>,
+    detected_port: Option<u16>,
     supervisor: &RuntimeSupervisor,
     sys: &System,
 ) -> LiveStatus {
     let procs = supervisor.processes.lock().unwrap();
 
     if let Some(entry) = procs.get(service_id) {
+        let has_log_error = entry.log_buf.lock().map(|buf| buf.has_error).unwrap_or(false);
         let pid_raw = entry.child.id();
         let pid = Pid::from_u32(pid_raw);
         if let Some(proc_info) = sys.process(pid) {
             return LiveStatus {
                 status: "running".to_string(),
                 pid: Some(pid_raw),
-                detected_port: expected_port,
+                detected_port,
                 cpu_percent: proc_info.cpu_usage() as f64,
                 memory_bytes: proc_info.memory(),
+                has_log_error,
                 last_signal: String::new(),
                 issue: None,
                 port_conflict: false,
@@ -131,6 +153,7 @@ pub(crate) fn get_live_status(
             detected_port: None,
             cpu_percent: 0.0,
             memory_bytes: 0,
+            has_log_error,
             last_signal: "Process exited unexpectedly".to_string(),
             issue: None,
             port_conflict: false,
@@ -145,6 +168,7 @@ pub(crate) fn get_live_status(
                 detected_port: Some(port),
                 cpu_percent: 0.0,
                 memory_bytes: 0,
+                has_log_error: false,
                 last_signal: String::new(),
                 issue: None,
                 port_conflict: false,
@@ -158,10 +182,201 @@ pub(crate) fn get_live_status(
         detected_port: None,
         cpu_percent: 0.0,
         memory_bytes: 0,
+        has_log_error: false,
         last_signal: String::new(),
         issue: None,
         port_conflict: false,
     }
+}
+
+pub(crate) fn resolve_supervised_ports(
+    supervisor: &RuntimeSupervisor,
+) -> HashMap<String, Option<u16>> {
+    let root_pids: Vec<(String, u32)> = {
+        let procs = supervisor.processes.lock().unwrap();
+        procs
+            .iter()
+            .map(|(service_id, entry)| (service_id.clone(), entry.child.id()))
+            .collect()
+    };
+
+    if root_pids.is_empty() {
+        return HashMap::new();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        resolve_supervised_ports_windows(&root_pids)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        root_pids
+            .into_iter()
+            .map(|(service_id, _)| (service_id, None))
+            .collect()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_supervised_ports_windows(
+    root_pids: &[(String, u32)],
+) -> HashMap<String, Option<u16>> {
+    let (children_by_parent, mut ports_by_pid) = query_windows_process_runtime_state();
+    if ports_by_pid.is_empty() {
+        populate_ports_from_netstat(&mut ports_by_pid);
+    }
+
+    root_pids
+        .iter()
+        .map(|(service_id, root_pid)| {
+            let mut ports: Vec<u16> = collect_process_tree_pids(*root_pid, &children_by_parent)
+                .into_iter()
+                .flat_map(|pid| ports_by_pid.get(&pid).into_iter().flatten().copied())
+                .collect();
+            ports.sort_unstable();
+            ports.dedup();
+            (service_id.clone(), ports.into_iter().next())
+        })
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn query_windows_process_runtime_state() -> (HashMap<u32, Vec<u32>>, HashMap<u32, Vec<u16>>) {
+    let mut children_by_parent: HashMap<u32, Vec<u32>> = HashMap::new();
+    let mut ports_by_pid: HashMap<u32, Vec<u16>> = HashMap::new();
+
+    let output = Command::new("powershell")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$ErrorActionPreference='SilentlyContinue'; \
+             Get-CimInstance Win32_Process | ForEach-Object { \"PROC {0} {1}\" -f $_.ParentProcessId, $_.ProcessId }; \
+             Get-NetTCPConnection -State Listen | ForEach-Object { \"PORT {0} {1}\" -f $_.OwningProcess, $_.LocalPort }",
+        ])
+        .output();
+
+    let Ok(output) = output else {
+        return (children_by_parent, ports_by_pid);
+    };
+
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let mut parts = line.split_whitespace();
+        match parts.next() {
+            Some("PROC") => {
+                let Some(parent_raw) = parts.next() else {
+                    continue;
+                };
+                let Some(child_raw) = parts.next() else {
+                    continue;
+                };
+                let Ok(parent_pid) = parent_raw.parse::<u32>() else {
+                    continue;
+                };
+                let Ok(child_pid) = child_raw.parse::<u32>() else {
+                    continue;
+                };
+                children_by_parent
+                    .entry(parent_pid)
+                    .or_default()
+                    .push(child_pid);
+            }
+            Some("PORT") => {
+                let Some(pid_raw) = parts.next() else {
+                    continue;
+                };
+                let Some(port_raw) = parts.next() else {
+                    continue;
+                };
+                let Ok(pid) = pid_raw.parse::<u32>() else {
+                    continue;
+                };
+                let Ok(port) = port_raw.parse::<u16>() else {
+                    continue;
+                };
+                ports_by_pid.entry(pid).or_default().push(port);
+            }
+            _ => {}
+        }
+    }
+
+    (children_by_parent, ports_by_pid)
+}
+
+#[cfg(target_os = "windows")]
+fn collect_process_tree_pids(
+    root_pid: u32,
+    children_by_parent: &HashMap<u32, Vec<u32>>,
+) -> HashSet<u32> {
+    let mut queue = VecDeque::from([root_pid]);
+    let mut seen = HashSet::new();
+
+    while let Some(pid) = queue.pop_front() {
+        if !seen.insert(pid) {
+            continue;
+        }
+        if let Some(children) = children_by_parent.get(&pid) {
+            queue.extend(children.iter().copied());
+        }
+    }
+
+    seen
+}
+
+#[cfg(target_os = "windows")]
+fn populate_ports_from_netstat(ports_by_pid: &mut HashMap<u32, Vec<u16>>) {
+    let Ok(output) = Command::new("netstat").args(["-ano", "-p", "tcp"]).output() else {
+        return;
+    };
+
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let columns: Vec<&str> = line.split_whitespace().collect();
+        if columns.len() < 5 || !columns[0].eq_ignore_ascii_case("TCP") {
+            continue;
+        }
+        if !columns[3].eq_ignore_ascii_case("LISTENING") {
+            continue;
+        }
+        let Some(port) = parse_local_port(columns[1]) else {
+            continue;
+        };
+        let Ok(pid) = columns[4].parse::<u32>() else {
+            continue;
+        };
+        ports_by_pid.entry(pid).or_default().push(port);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn parse_local_port(local_address: &str) -> Option<u16> {
+    local_address
+        .rsplit_once(':')
+        .and_then(|(_, port)| port.parse::<u16>().ok())
+}
+
+pub(crate) fn refresh_system_telemetry(supervisor: &RuntimeSupervisor, sys: &mut System) {
+    let pids: Vec<Pid> = {
+        let procs = supervisor.processes.lock().unwrap();
+        procs
+            .values()
+            .map(|entry| Pid::from_u32(entry.child.id()))
+            .collect()
+    };
+
+    sys.refresh_memory();
+    sys.refresh_cpu_usage();
+
+    if pids.is_empty() {
+        return;
+    }
+
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&pids),
+        true,
+        ProcessRefreshKind::nothing().with_cpu().with_memory(),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +393,41 @@ fn emit_log_line(app: &AppHandle, service_id: &str, entry: ServiceLogEntry) {
             entry,
         },
     );
+}
+
+fn detect_log_level(stream: &str, message: &str) -> &'static str {
+    let mut saw_info = false;
+    let mut saw_debug = false;
+    let mut saw_trace = false;
+
+    for token in message.split(|ch: char| !ch.is_alphanumeric()) {
+        if token.is_empty() {
+            continue;
+        }
+
+        match token.to_ascii_lowercase().as_str() {
+            "error" | "fatal" | "panic" | "exception" | "failed" | "failure" => return "error",
+            "warn" | "warning" => return "warn",
+            "debug" => saw_debug = true,
+            "trace" | "verbose" => saw_trace = true,
+            "info" | "log" => saw_info = true,
+            _ => {}
+        }
+    }
+
+    if stream == "stderr" {
+        return "error";
+    }
+    if saw_debug {
+        return "debug";
+    }
+    if saw_trace {
+        return "trace";
+    }
+    if saw_info {
+        return "info";
+    }
+    "info"
 }
 
 fn sanitize_log_message(raw: &str) -> Option<String> {
@@ -316,11 +566,12 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
                 thread::spawn(move || {
                     for line in BufReader::new(out).lines().flatten() {
                         let mut locked = buf.lock().unwrap();
-                        locked.append("stdout", line);
-                        // Emitir la entrada recién añadida al frontend
-                        if let Some(entry) = locked.entries.last().cloned() {
+                        if let Some((entry, promoted_to_error)) = locked.append("stdout", line) {
                             drop(locked);
                             emit_log_line(&app_clone, &sid, entry);
+                            if promoted_to_error {
+                                emit_dashboard_update(&app_clone);
+                            }
                         }
                     }
                 });
@@ -334,10 +585,12 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
                 thread::spawn(move || {
                     for line in BufReader::new(err).lines().flatten() {
                         let mut locked = buf.lock().unwrap();
-                        locked.append("stderr", line);
-                        if let Some(entry) = locked.entries.last().cloned() {
+                        if let Some((entry, promoted_to_error)) = locked.append("stderr", line) {
                             drop(locked);
                             emit_log_line(&app_clone, &sid, entry);
+                            if promoted_to_error {
+                                emit_dashboard_update(&app_clone);
+                            }
                         }
                     }
                 });
@@ -422,7 +675,10 @@ pub fn clear_service_logs(app: &AppHandle, service_id: &str) -> Result<ServiceLo
         let mut buf = entry.log_buf.lock().unwrap();
         buf.entries.clear();
         buf.dropped = 0;
+        buf.has_error = false;
     }
+    drop(procs);
+    emit_dashboard_update(app);
     Ok(ServiceLogSnapshot {
         service_id: service_id.to_string(),
         entries: vec![],
@@ -493,7 +749,7 @@ fn split_command(cmd: &str) -> (String, Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_log_message;
+    use super::{detect_log_level, sanitize_log_message};
 
     #[test]
     fn strips_ansi_sequences_from_log_lines() {
@@ -515,5 +771,21 @@ mod tests {
             sanitize_log_message("booting\rready\u{8}!"),
             Some("read!".to_string())
         );
+    }
+
+    #[test]
+    fn detects_error_keywords_from_stdout_messages() {
+        assert_eq!(
+            detect_log_level(
+                "stdout",
+                "[Nest] 128072  - 21/03/2026, 7:54:37 p. m.   ERROR : cuando en la log salga un error"
+            ),
+            "error"
+        );
+    }
+
+    #[test]
+    fn keeps_stderr_as_error_without_explicit_keyword() {
+        assert_eq!(detect_log_level("stderr", "listen EADDRINUSE"), "error");
     }
 }

@@ -148,7 +148,7 @@ Estado actual:
 Criterios de aceptacion:
 - La UI permite abrir carpeta y terminal en la carpeta del servicio.
 - La UI permite copiar puerto y comando asociado.
-- Si el puerto esperado esta ocupado, la app muestra una advertencia clara.
+- Tras iniciar un servicio supervisado, la app muestra claramente el puerto TCP detectado cuando el proceso abre un listener local.
 
 Dependencias:
 - `US2.1`
@@ -438,3 +438,81 @@ Dependencias:
 
 Trazabilidad:
 - Roadmap: `SC-010`
+
+### [x] SC-016 - Hardening del launcher desktop de desarrollo
+Objetivo: Evitar sesiones de desarrollo rotas por procesos desktop o listeners huerfanos, y volver accionables los crashes nativos de Tauri durante el arranque local.
+
+Estado actual:
+- `tauri:dev` ahora pasa por un wrapper repo-local antes de invocar `tauri dev`.
+- El wrapper limpia `ms-control-center.exe` huerfanos del repo, valida si el puerto `1420` esta ocupado y deja un error claro cuando el owner no pertenece a este workspace.
+- El arranque de desarrollo fuerza `RUST_BACKTRACE=1` para que el siguiente fallo nativo no quede en un mensaje opaco.
+
+Criterios de aceptacion:
+- Reejecutar `npm run tauri:dev` despues de una sesion rota no deja otra instancia desktop vieja compitiendo con el arranque nuevo.
+- Si el puerto `1420` lo ocupa otro proceso, el comando falla con un diagnostico explicito en lugar de una cadena opaca de errores.
+- Los fallos nativos de Rust/Tauri durante desarrollo heredan `RUST_BACKTRACE=1`.
+
+Dependencias:
+- N/A
+
+Trazabilidad:
+- Roadmap: `SC-016`
+
+### [x] SC-018 - Limpieza de arboles stale en el launcher desktop
+Objetivo: evitar falsos positivos de puerto ocupado cuando una sesion `tauri:dev` deja wrappers shell intermedios vivos en Windows.
+
+Estado actual:
+- El wrapper inspecciona ancestros y descendientes del PID que escucha `1420` para detectar la sesion repo-local completa de desarrollo.
+- Si el listener pertenece a la cadena `shell -> npm -> tauri -> vite` del repo, el launcher corta la raiz relevante con `taskkill /T /F` en lugar de limitarse al PID directo de Vite.
+- Cuando `1420` pertenece a otro proceso ajeno al workspace, el error explicito se mantiene y ya no se limpia nada por heuristica amplia.
+
+Criterios de aceptacion:
+- Reejecutar `npm run tauri:dev` despues de una sesion rota con wrappers `cmd` o `powershell` no falla por un falso positivo de puerto ocupado.
+- La limpieza mata solo arboles repo-locales relacionados con `tauri:dev`.
+- Tras limpiar el arbol stale, el launcher vuelve a levantar `MS Control Center` en `127.0.0.1:1420`.
+
+Dependencias:
+- `SC-016`
+
+Trazabilidad:
+- Roadmap: `SC-018`
+
+### [x] SC-019 - Severidad de logs reflejada en nodos del canvas
+Objetivo: hacer visible en el grafo cuando un servicio sigue vivo pero su salida ya reporta errores.
+
+Estado actual:
+- El runtime clasifica severidad por palabras clave (`error`, `warn`, `debug`, `trace`, etc.) y mantiene `stderr` como fallback a `error`.
+- Cada servicio expone una bandera derivada del buffer actual de logs para que el canvas pinte el nodo en rojo sin convertir el proceso a `status=error`.
+- Limpiar logs o reiniciar el servicio elimina la senal visual de error heredada del buffer anterior.
+
+Criterios de aceptacion:
+- Una linea estilo Nest con `ERROR` aunque llegue por `stdout` lleva el nodo a tono critico.
+- Un proceso que sigue corriendo conserva acciones como `Stop` y `Restart`; solo cambia la senal visual del nodo.
+- Al limpiar logs o reiniciar el servicio, el nodo deja de heredar el rojo si no existen nuevos errores en el buffer.
+
+Dependencias:
+- `US3.3`
+- `SC-008`
+
+Trazabilidad:
+- Roadmap: `SC-019`
+
+### [x] SC-020 - Autodeteccion de puerto real en nodos manuales
+Objetivo: eliminar la configuracion manual del puerto al registrar nodos y mostrar el puerto TCP real que abre el proceso supervisado.
+
+Estado actual:
+- El modal de alta y edicion de nodos ya no pide `Puerto esperado`.
+- Los nodos nuevos o editados se guardan sin puerto manual y el dashboard muestra solo `detectedPort`.
+- El backend resuelve el puerto visible inspeccionando el arbol de procesos supervisado y sus listeners TCP en Windows.
+
+Criterios de aceptacion:
+- El usuario puede crear o editar un nodo sin ingresar puerto.
+- Tras iniciar un nodo supervisado, la UI muestra el puerto detectado si el proceso abre un listener TCP local.
+- La UI deja de depender de `expectedPort` para renderizar el puerto de los nodos supervisados.
+
+Dependencias:
+- `US2.1`
+- `US3.1`
+
+Trazabilidad:
+- Roadmap: `SC-020`

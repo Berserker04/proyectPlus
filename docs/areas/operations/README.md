@@ -14,12 +14,12 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - Todo proceso iniciado por la app debe quedar supervisado para poder detenerse o reiniciarse de forma controlada.
 - Los conflictos de arranque, especialmente puertos ocupados y comandos invalidos, deben mostrarse como errores estructurados.
 - `US2.1` se resuelve con un supervisor en memoria: la UI solicita `Run`, el backend lanza el proceso, refleja `starting` y refresca el snapshot hasta `running` o `error`.
-- En este lote la correlacion de puerto es best effort: usa el puerto esperado como confirmacion de disponibilidad durante el arranque y expone el PID real del proceso hijo.
+- La correlacion de puerto para nodos supervisados ahora es runtime-only: el backend inspecciona el arbol del proceso y toma el primer listener TCP local que encuentra como `detectedPort`.
 - `US2.2` cierra `Stop` y `Restart` sobre el mismo supervisor: `Stop` corta el arbol de procesos y `Restart` reusa el catalogo del servicio para relanzarlo sin perder supervision.
 - En Windows, el cierre operativo usa `taskkill /PID <pid> /T /F` sobre el proceso shell supervisado para poder matar tambien hijos del comando de arranque.
 - Si el cierre no logra liberar el puerto o la app encuentra estados `starting/running` sin supervisor al reabrir, el servicio se marca como `error` con issue estructurado de proceso huerfano o arranque interrumpido.
 - `US2.3` agrega accesos rapidos nativos por servicio: abrir carpeta, abrir terminal, copiar puerto, copiar comando y un handoff de logs desde la UI hacia el contexto operativo actual.
-- Las advertencias de puerto ocupado ahora tambien son preventivas: un servicio detenido o en error puede marcar `port busy` si el puerto esperado responde fuera del supervisor.
+- Los nodos nuevos ya no piden `Puerto esperado`; los conflictos preventivos solo siguen siendo posibles en registros legacy que todavia conservan ese dato persistido.
 - El handoff de logs no intenta suplir `US3.3`: por ahora centraliza ultima senal, issue, ruta, puerto y comando como punto de entrada operativo.
 - `Run` y `Restart` ya validan `startCommand` contra una allowlist estricta de launchers y rechazan chaining, pipes, redirecciones o rutas relativas que intenten salir del workspace activo.
 - `Open terminal` ya valida que la shell preferida este incluida en `allowedShells`; si no, la accion se bloquea con error estructurado en vez de abrir una shell arbitraria.
@@ -52,6 +52,7 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - `SC-009`: las interacciones del canvas quedaron separadas por intencion: drag desde el header, seleccion fiable por click y acciones operativas secundarias solo en la rail derecha.
 - `SC-010`: operaciones termino de blindar botones y labels del canvas con `nodrag` y `nopan`, y alinea el foco del inspector con cualquier accion runtime disparada desde el nodo.
 - `SC-011`: operaciones compacto el switcher del inspector derecho con selects por tipo para sostener la escalabilidad visual del rail sin cambiar los contratos runtime.
+- `SC-020`: operaciones elimino el campo manual de puerto del modal de nodos y ahora refleja solo el puerto TCP real detectado tras arrancar el proceso supervisado.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

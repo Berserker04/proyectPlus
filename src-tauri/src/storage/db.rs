@@ -16,7 +16,10 @@ use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
 use super::events::RefreshConfig;
-use super::runtime::{get_live_status, stop_service, RuntimeSupervisor, TelemetryCache};
+use super::runtime::{
+    get_live_status, refresh_system_telemetry, resolve_supervised_ports, stop_service,
+    RuntimeSupervisor, TelemetryCache,
+};
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -228,6 +231,7 @@ fn load_services_for_project(
     project_id: &str,
     supervisor: &RuntimeSupervisor,
     sys: &System,
+    detected_ports: &HashMap<String, Option<u16>>,
     node_layouts: &HashMap<String, ServiceNodeLayout>,
 ) -> Result<Vec<Microservice>, String> {
     let mut stmt = conn
@@ -262,7 +266,13 @@ fn load_services_for_project(
         let (id, proj_id, kind, name, wd, cmd, port, order, created, updated) =
             row.map_err(|e| e.to_string())?;
         let expected_port = port.map(|p| p as u16);
-        let live = get_live_status(&id, expected_port, supervisor, sys);
+        let live = get_live_status(
+            &id,
+            expected_port,
+            detected_ports.get(&id).copied().flatten(),
+            supervisor,
+            sys,
+        );
         result.push(Microservice {
             graph: node_layouts.get(&id).cloned(),
             id,
@@ -277,6 +287,7 @@ fn load_services_for_project(
             pid: live.pid,
             cpu_percent: live.cpu_percent,
             memory_bytes: live.memory_bytes,
+            has_log_error: live.has_log_error,
             last_signal: live.last_signal,
             issue: live.issue,
             port_conflict: live.port_conflict,
@@ -296,7 +307,7 @@ pub(crate) fn build_snapshot(app: &AppHandle) -> Result<DashboardSnapshot, Strin
 
     let (cpu_total, mem_used, mem_total) = {
         let mut sys = cache.system.lock().unwrap();
-        sys.refresh_all();
+        refresh_system_telemetry(&supervisor, &mut sys);
         (
             sys.global_cpu_usage() as f64,
             sys.used_memory(),
@@ -316,8 +327,16 @@ pub(crate) fn build_snapshot(app: &AppHandle) -> Result<DashboardSnapshot, Strin
 
     let services = if let Some(id) = active_id {
         let topology = get_project_topology_from_conn(&conn, &id)?;
+        let detected_ports = resolve_supervised_ports(&supervisor);
         let sys = cache.system.lock().unwrap();
-        load_services_for_project(&conn, &id, &supervisor, &sys, &topology.node_layouts)?
+        load_services_for_project(
+            &conn,
+            &id,
+            &supervisor,
+            &sys,
+            &detected_ports,
+            &topology.node_layouts,
+        )?
     } else {
         vec![]
     };

@@ -16,7 +16,6 @@ pub use db::{
     save_project_topology, select_project, update_microservice, update_project,
     update_service_order,
 };
-pub use metrics::is_port_open;
 pub use runtime::{
     cleanup_runtime, clear_service_logs, get_service_logs, restart_service, run_service,
     stop_service, RuntimeSupervisor, TelemetryCache,

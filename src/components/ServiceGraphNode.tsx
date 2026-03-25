@@ -21,10 +21,11 @@ export interface ServiceGraphNodeData {
 function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeData>) {
   const { service } = data;
   const telemetry = data.telemetry ?? buildPressureTelemetry(service);
-  const port = service.detectedPort ?? service.expectedPort;
+  const port = service.detectedPort;
   const isStopped = service.status === "stopped" || service.status === "error";
   const isRunning = service.status === "running";
   const isExternal = service.status === "external";
+  const pressureLabel = telemetry.hasLogError ? "Log error" : getPressureLabel(telemetry.pressureTone);
 
   return (
     <div className={`flow-node flow-node-${telemetry.pressureTone}${selected ? " is-selected" : ""}`}>
@@ -71,7 +72,7 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
         <div className="flow-node-meta">
           <span>Port {port ?? "N/A"}</span>
           <span>PID {service.pid ?? "N/A"}</span>
-          <span>{getPressureLabel(telemetry.pressureTone)}</span>
+          <span>{pressureLabel}</span>
         </div>
 
         <div className="flow-node-metrics">

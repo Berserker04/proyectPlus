@@ -103,8 +103,8 @@ export function ServiceCard({
         </div>
         <div className="sc-meta">
           {svc.pid && <span className="sc-chip">PID {svc.pid}</span>}
-          {(svc.detectedPort ?? svc.expectedPort) && (
-            <span className="sc-chip">:{svc.detectedPort ?? svc.expectedPort}</span>
+          {svc.detectedPort && (
+            <span className="sc-chip">:{svc.detectedPort}</span>
           )}
         </div>
       </div>

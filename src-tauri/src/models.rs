@@ -71,6 +71,7 @@ pub struct Microservice {
     pub pid: Option<u32>,
     pub cpu_percent: f64,
     pub memory_bytes: u64,
+    pub has_log_error: bool,
     pub last_signal: String,
     pub issue: Option<ServiceActionIssue>,
     pub port_conflict: bool,
@@ -157,6 +158,7 @@ pub struct MicroserviceDraft {
     pub name: String,
     pub working_directory: String,
     pub start_command: String,
+    #[serde(default)]
     pub expected_port: Option<u16>,
 }
 

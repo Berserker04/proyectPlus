@@ -16,9 +16,10 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - El dashboard inicial debe mostrar estado minimo util desde el primer escaneo, sin esperar a observabilidad avanzada.
 - La seleccion de workspace dispara un escaneo inicial de candidatos Nest para poblar el catalogo persistido.
 - El autodiscovery actual ya cubre `package.json`, `nest-cli.json`, scripts, estructura tipica Nest, monorepos con `projects` y carpetas con repos separados.
-- Cada servicio detectado resuelve como minimo nombre, path relativo, runtime, framework, puerto esperado y comando de arranque sugerido.
+- Cada servicio detectado resuelve como minimo nombre, path relativo, runtime, framework, puerto estimado y comando de arranque sugerido.
 - El manifest manual del workspace vive en `.ms-control-center/services.manifest.json`.
 - La UI ya permite registrar un servicio manual minimo; guardar ese formulario actualiza el manifest y reescanea el catalogo activo.
+- El alta manual de nodos ya no solicita puerto; ese dato se resuelve despues en runtime cuando el proceso supervisado abre un listener TCP local.
 - Si un `path` del manifest coincide con un servicio autodetectado, el manifest gana; si no coincide, crea un servicio manual nuevo.
 - El dashboard ya ordena por nombre, estado, puerto, CPU, RAM e inicio catalogado del servicio.
 - Mientras no existan procesos supervisados, el orden por `Inicio` usa la fecha de catalogacion persistida como referencia visible del servicio.
@@ -62,6 +63,7 @@ Esta area cubre el registro de workspaces, el escaneo de carpetas, el autodiscov
 - `SC-009`: el canvas topologico se estabilizo con drag handle dedicado, seleccion consistente de nodos y conexiones manuales mas confiables.
 - `SC-010`: discovery termino de endurecer el canvas usando `focusedServiceId` como fuente de verdad, `dragHandle` explicito en un grip visible del nodo y superficies interactivas protegidas con `nodrag` y `nopan`.
 - `SC-011`: discovery compacto el switcher del inspector derecho en dos selects por tipo de nodo para que la rail escale mejor cuando aumenta el catalogo.
+- `SC-020`: discovery simplifico el modal de nodos quitando el puerto manual; desde ahora la metadata de puerto visible llega solo desde observabilidad en runtime.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

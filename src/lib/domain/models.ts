@@ -56,6 +56,7 @@ export interface Microservice {
   pid: number | null;
   cpuPercent: number;
   memoryBytes: number;
+  hasLogError: boolean;
   lastSignal: string;
   issue: ServiceActionIssue | null;
   portConflict: boolean;
@@ -127,7 +128,7 @@ export interface MicroserviceDraft {
   name: string;
   workingDirectory: string;
   startCommand: string;
-  expectedPort: number | null;
+  expectedPort?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,4 +166,5 @@ export interface NodeTelemetryViewModel {
   pressureTone: "healthy" | "warning" | "pressure" | "critical" | "idle";
   cpuPercent: number;
   memoryBytes: number;
+  hasLogError: boolean;
 }

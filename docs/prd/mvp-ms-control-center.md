@@ -44,7 +44,7 @@ Construir una aplicacion de escritorio que permita administrar microservicios lo
 - registro manual del nombre del microservicio
 - registro manual de la ruta del directorio de trabajo
 - registro manual del comando de inicio
-- registro manual del puerto esperado
+- autodeteccion best effort del puerto TCP levantado por el microservicio
 - ejecucion del microservicio desde la app
 - detencion del microservicio desde la app
 - reinicio del microservicio desde la app
@@ -91,7 +91,7 @@ El usuario crea un proyecto nuevo desde la app y este aparece en la barra latera
 
 ### Caso de uso 2: Registrar microservicio
 
-Dentro de un proyecto, el usuario agrega un microservicio indicando nombre, ruta, comando de inicio y puerto.
+Dentro de un proyecto, el usuario agrega un microservicio indicando nombre, ruta y comando de inicio. Cuando el proceso arranca, la app intenta detectar automaticamente en que puerto quedo escuchando.
 
 ### Caso de uso 3: Ejecutar microservicio
 
@@ -123,7 +123,7 @@ El usuario ve cuanto CPU y RAM consume cada microservicio, ademas del resumen ge
 - Como usuario, quiero agregar un microservicio a un proyecto para administrarlo desde la app.
 - Como usuario, quiero configurar el comando exacto con el que arranca el microservicio para adaptarlo a cualquier stack.
 - Como usuario, quiero definir el directorio de trabajo del microservicio para que el proceso se ejecute en la ubicacion correcta.
-- Como usuario, quiero registrar el puerto esperado para identificar el servicio mas facilmente.
+- Como usuario, quiero que la app detecte automaticamente el puerto real del microservicio para no configurarlo a mano.
 
 ### Ejecucion
 
@@ -164,7 +164,8 @@ Cada microservicio debe almacenar:
 - nombre
 - ruta del directorio de trabajo
 - comando de inicio
-- puerto esperado
+
+Ademas, la app debe exponer el puerto detectado en runtime cuando el proceso abra un listener TCP local.
 
 ### RF-05 Inicio de proceso
 
@@ -304,7 +305,7 @@ export type Microservice = {
   name: string;
   workingDirectory: string;
   startCommand: string;
-  port?: number;
+  detectedPort?: number;
   status: "stopped" | "starting" | "running" | "error";
   pid?: number;
   createdAt: string;
@@ -456,7 +457,7 @@ Responsable de mostrar metricas, tarjetas y graficas.
 
 1. El usuario conoce el comando correcto para iniciar cada microservicio.
 2. El usuario proporcionara una ruta local valida.
-3. El puerto se registra manualmente en esta version.
+3. La app intentara detectar automaticamente el puerto cuando el proceso exponga un listener TCP local.
 4. Los microservicios a administrar seran procesos lanzables mediante comando del sistema.
 5. La primera entrega prioriza Windows.
 
@@ -472,7 +473,7 @@ Medir GPU por proceso puede no ser confiable en todos los entornos y librerias. 
 
 No todos los stacks exponen el puerto de forma uniforme.
 
-**Decision:** en el MVP se registra manualmente el puerto esperado y luego se puede evolucionar a verificacion automatica.
+**Decision:** en el MVP la app intenta detectar automaticamente el puerto real inspeccionando listeners TCP locales del proceso supervisado. Si no puede resolverlo, la UI mostrara `N/A`.
 
 ### 17.3 Comandos heterogeneos
 
