@@ -53,6 +53,8 @@ Definition of done:
 - [x] `T2.1.1 | US2.1 |` Modelar la accion `Run` con feedback inmediato y estado `starting`.
 - [x] `T2.1.2 | US2.1 |` Lanzar procesos supervisados y correlacionar servicio, PID y puerto.
 - [x] `T2.1.3 | US2.1 |` Reportar error estructurado cuando falle el arranque.
+- [x] `T2.1.4 | US2.1 |` Ejecutar `Run` y `Restart` fuera del hilo critico de Tauri, manteniendo `starting` visible mientras el runtime termina de lanzar el proceso.
+- [x] `T2.1.5 | US2.1 |` Mantener `Start all` secuencial en el orden actual del proyecto sin bloquear la UI ni permitir dobles disparos de la cola.
 
 ### [x] US2.2 - Detener y reiniciar servicios supervisados
 - [x] `T2.2.1 | US2.2 |` Implementar `Stop` con cierre controlado de procesos lanzados por la app.
@@ -63,6 +65,7 @@ Definition of done:
 - [x] `T2.3.1 | US2.3 |` Implementar `Open folder` y `Open terminal in folder`.
 - [x] `T2.3.2 | US2.3 |` Implementar `Copy port` y `Copy command`.
 - [x] `T2.3.3 | US2.3 |` Resolver el puerto visible del servicio en runtime y enlazar la apertura de logs desde la UI.
+- [x] `T2.3.4 | US2.3 |` Ejecutar `Port tools` fuera del hilo critico de Tauri y aislar su pending en UI para no bloquear acciones no relacionadas mientras se libera el puerto.
 
 ## E3 - Observabilidad local
 Dependencias de epica:
@@ -168,5 +171,8 @@ Definition of done:
 - [x] `SC-023 | operations, ui |` Agregar en el menu izquierdo una herramienta de puerto que reciba un `port`, resuelva el listener TCP en Windows, mate su arbol de procesos con `taskkill /T /F` y resincronice cualquier nodo supervisado afectado.
 - [x] `SC-024 | observability, ui |` Volver a propagar logs criticos al canvas aunque el wrapper siga vivo y retirar el bloque de error embebido dentro de cada nodo, dejando el detalle solo en el inspector/toasts.
 - [x] `SC-025 | observability, ui |` Limitar el rojo del canvas a fallas bloqueantes reales: un nodo `running` ya no entra en critico por cualquier log `ERROR` o `stderr`; solo por `status=error` o por una falla de arranque que deje al runtime sin listener operativo.
+- [x] `SC-026 | operations, ui |` Volver no bloqueantes los arranques manuales y masivos: `Run`/`Restart` se ejecutan fuera del hilo principal de Tauri, el nodo entra en `starting` de inmediato y `Start all` se protege contra dobles disparos.
+- [x] `SC-027 | operations, observability |` Detectar fallas de bootstrap por base de datos cuando el servicio corre bajo watchers tipo `nest start --watch`, de forma que errores como `PrismaClientInitializationError` promuevan el nodo a `error` si no llega a abrir listener TCP.
+- [x] `SC-028 | operations, ui |` Volver no bloqueante `Port tools`: el kill por puerto se despacha con `spawn_blocking`, evita snapshots redundantes al limpiar nodos supervisados y ya no apaga acciones no relacionadas del dashboard.
 - Plantilla de registro:
   - [ ] `SC-001 | area |` Descripcion del cambio detectado, razon, impacto en historias y docs afectados.

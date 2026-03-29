@@ -27,7 +27,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::db::{build_snapshot, open_db};
-use super::events::emit_dashboard_update;
+use super::events::{emit_dashboard_snapshot, emit_dashboard_update};
 use super::metrics::is_port_open;
 
 // ---------------------------------------------------------------------------
@@ -101,6 +101,7 @@ impl LogBuffer {
 #[derive(Default)]
 pub struct RuntimeSupervisor {
     pub(crate) processes: Mutex<HashMap<String, ProcessEntry>>,
+    pub(crate) launching: Mutex<HashSet<String>>,
 }
 
 /// Cache de métricas del sistema (sysinfo::System) compartido entre polls.
@@ -145,6 +146,7 @@ pub(crate) fn get_live_status(
     supervisor: &RuntimeSupervisor,
     sys: &System,
 ) -> LiveStatus {
+    let is_launching = supervisor.launching.lock().unwrap().contains(service_id);
     let procs = supervisor.processes.lock().unwrap();
 
     if let Some(entry) = procs.get(service_id) {
@@ -155,6 +157,32 @@ pub(crate) fn get_live_status(
             .unwrap_or((false, None));
         let pid_raw = entry.child.id();
         let pid = Pid::from_u32(pid_raw);
+        if is_launching {
+            if let Some(proc_info) = sys.process(pid) {
+                return LiveStatus {
+                    status: "starting".to_string(),
+                    pid: Some(pid_raw),
+                    detected_port: None,
+                    cpu_percent: proc_info.cpu_usage() as f64,
+                    memory_bytes: proc_info.memory(),
+                    has_log_error,
+                    last_signal: String::new(),
+                    issue: None,
+                    port_conflict: false,
+                };
+            }
+            return LiveStatus {
+                status: "starting".to_string(),
+                pid: Some(pid_raw),
+                detected_port: None,
+                cpu_percent: 0.0,
+                memory_bytes: 0,
+                has_log_error,
+                last_signal: String::new(),
+                issue: None,
+                port_conflict: false,
+            };
+        }
         if let Some(proc_info) = sys.process(pid) {
             if let Some(signal) = blocking_signal.filter(|_| detected_port.is_none()) {
                 return LiveStatus {
@@ -195,6 +223,20 @@ pub(crate) fn get_live_status(
             memory_bytes: 0,
             has_log_error,
             last_signal: "Process exited unexpectedly".to_string(),
+            issue: None,
+            port_conflict: false,
+        };
+    }
+
+    if is_launching {
+        return LiveStatus {
+            status: "starting".to_string(),
+            pid: None,
+            detected_port: None,
+            cpu_percent: 0.0,
+            memory_bytes: 0,
+            has_log_error: false,
+            last_signal: String::new(),
             issue: None,
             port_conflict: false,
         };
@@ -564,6 +606,29 @@ fn detect_blocking_signal(stream: &str, message: &str) -> Option<BlockingSignal>
         });
     }
 
+    if normalized.contains("prismaclientinitializationerror")
+        || normalized.contains("can't reach database server")
+        || normalized.contains("cannot reach database server")
+        || normalized.contains("errorcode: 'p1001'")
+        || normalized.contains("error code: p1001")
+    {
+        let detail = if stream == "stderr" {
+            Some(
+                "The service could not connect to its database dependency during bootstrap."
+                    .to_string(),
+            )
+        } else {
+            None
+        };
+        return Some(BlockingSignal {
+            code: "DATABASE_BOOTSTRAP_FAILED",
+            title: "Database bootstrap failed",
+            message: message.to_string(),
+            detail,
+            port_conflict: false,
+        });
+    }
+
     if normalized.contains("[exceptionhandler]") {
         let detail = if stream == "stderr" {
             Some("Nest reported an exception during bootstrap/runtime handling.".to_string())
@@ -668,7 +733,10 @@ fn skip_st(chars: &mut Peekable<Chars<'_>>) {
 // API pública — runtime de servicios
 // ---------------------------------------------------------------------------
 
-pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceResponse, String> {
+fn spawn_service_process(
+    app: &AppHandle,
+    service_id: &str,
+) -> Result<Option<ServiceActionIssue>, String> {
     let conn = open_db(app)?;
     let row: Result<(String, String, String, Option<i64>), _> = conn.query_row(
         "SELECT name, working_directory, start_command, expected_port FROM microservice WHERE id = ?1",
@@ -678,19 +746,16 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
     let (svc_name, wd, cmd, _port) = row.map_err(|e| format!("service not found: {e}"))?;
 
     if cmd.trim().is_empty() {
-        return Ok(RunServiceResponse {
-            snapshot: build_snapshot(app)?,
-            issue: Some(ServiceActionIssue {
-                service_id: service_id.to_string(),
-                code: "NO_START_COMMAND".to_string(),
-                title: "Comando de inicio vacío".to_string(),
-                message: format!("`{svc_name}` no tiene un comando de inicio configurado."),
-                detail: None,
-            }),
-        });
+        return Ok(Some(ServiceActionIssue {
+            service_id: service_id.to_string(),
+            code: "NO_START_COMMAND".to_string(),
+            title: "Comando de inicio vacío".to_string(),
+            message: format!("`{svc_name}` no tiene un comando de inicio configurado."),
+            detail: None,
+        }));
     }
 
-    let _ = stop_service(app, service_id);
+    stop_service_process(app, service_id, false)?;
 
     #[cfg(target_os = "windows")]
     let child_result = Command::new("cmd")
@@ -712,16 +777,13 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
     };
 
     match child_result {
-        Err(e) => Ok(RunServiceResponse {
-            snapshot: build_snapshot(app)?,
-            issue: Some(ServiceActionIssue {
-                service_id: service_id.to_string(),
-                code: "SPAWN_FAILED".to_string(),
-                title: "No se pudo iniciar el proceso".to_string(),
-                message: format!("Error al ejecutar `{cmd}`: {e}"),
-                detail: Some(format!("Programa: {cmd:?}, cwd: {wd}")),
-            }),
-        }),
+        Err(e) => Ok(Some(ServiceActionIssue {
+            service_id: service_id.to_string(),
+            code: "SPAWN_FAILED".to_string(),
+            title: "No se pudo iniciar el proceso".to_string(),
+            message: format!("Error al ejecutar `{cmd}`: {e}"),
+            detail: Some(format!("Programa: {cmd:?}, cwd: {wd}")),
+        })),
         Ok(mut child) => {
             let log_buf = Arc::new(Mutex::new(LogBuffer::default()));
 
@@ -737,7 +799,9 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
                             drop(locked);
                             emit_log_line(&app_clone, &sid, entry);
                             if promoted_to_error {
-                                emit_dashboard_update(&app_clone);
+                                if let Ok(snapshot) = build_snapshot(&app_clone) {
+                                    emit_dashboard_snapshot(&app_clone, &snapshot);
+                                }
                             }
                         }
                     }
@@ -756,7 +820,9 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
                             drop(locked);
                             emit_log_line(&app_clone, &sid, entry);
                             if promoted_to_error {
-                                emit_dashboard_update(&app_clone);
+                                if let Ok(snapshot) = build_snapshot(&app_clone) {
+                                    emit_dashboard_snapshot(&app_clone, &snapshot);
+                                }
                             }
                         }
                     }
@@ -764,21 +830,42 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
             }
 
             let supervisor = app.state::<RuntimeSupervisor>();
+            let launching = supervisor.launching.lock().unwrap();
+            if !launching.contains(service_id) {
+                drop(launching);
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = kill_process_tree(child.id());
+                }
+                let _ = child.kill();
+                let _ = child.wait();
+                return Ok(None);
+            }
+
             supervisor
                 .processes
                 .lock()
                 .unwrap()
                 .insert(service_id.to_string(), ProcessEntry { child, log_buf });
+            drop(launching);
 
-            let snapshot = build_snapshot(app)?;
-            // Emitir evento push para sincronizar otros listeners del frontend
-            emit_dashboard_update(app);
-            Ok(RunServiceResponse {
-                snapshot,
-                issue: None,
-            })
+            Ok(None)
         }
     }
+}
+
+pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceResponse, String> {
+    let issue = match spawn_service_process(app, service_id) {
+        Ok(issue) => issue,
+        Err(error) => {
+            clear_service_launching(app, service_id);
+            return Err(error);
+        }
+    };
+    clear_service_launching(app, service_id);
+    let snapshot = build_snapshot(app)?;
+    emit_dashboard_snapshot(app, &snapshot);
+    Ok(RunServiceResponse { snapshot, issue })
 }
 
 #[cfg(target_os = "windows")]
@@ -800,7 +887,7 @@ pub fn kill_process_on_port(app: &AppHandle, port: u16) -> Result<PortKillRespon
     };
 
     for service_id in &matched_service_ids {
-        stop_service(app, service_id)?;
+        stop_service_process(app, service_id, true)?;
     }
 
     for pid in listener_pids
@@ -812,7 +899,7 @@ pub fn kill_process_on_port(app: &AppHandle, port: u16) -> Result<PortKillRespon
     }
 
     let snapshot = build_snapshot(app)?;
-    emit_dashboard_update(app);
+    emit_dashboard_snapshot(app, &snapshot);
 
     Ok(PortKillResponse {
         snapshot,
@@ -828,20 +915,9 @@ pub fn kill_process_on_port(_app: &AppHandle, _port: u16) -> Result<PortKillResp
 }
 
 pub fn stop_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionResponse, String> {
-    let supervisor = app.state::<RuntimeSupervisor>();
-    let mut procs = supervisor.processes.lock().unwrap();
-    if let Some(mut entry) = procs.remove(service_id) {
-        let pid = entry.child.id();
-        #[cfg(target_os = "windows")]
-        {
-            let _ = kill_process_tree(pid);
-        }
-        let _ = entry.child.kill();
-        let _ = entry.child.wait();
-    }
-    drop(procs);
+    stop_service_process(app, service_id, true)?;
     let snapshot = build_snapshot(app)?;
-    emit_dashboard_update(app);
+    emit_dashboard_snapshot(app, &snapshot);
     Ok(ServiceActionResponse {
         snapshot,
         issue: None,
@@ -849,13 +925,18 @@ pub fn stop_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionRe
 }
 
 pub fn restart_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionResponse, String> {
-    let _ = stop_service(app, service_id)?;
-    let run_result = run_service(app, service_id)?;
-    // emit_dashboard_update ya fue llamado dentro de stop_service y run_service
-    Ok(ServiceActionResponse {
-        snapshot: run_result.snapshot,
-        issue: run_result.issue,
-    })
+    stop_service_process(app, service_id, false)?;
+    let issue = match spawn_service_process(app, service_id) {
+        Ok(issue) => issue,
+        Err(error) => {
+            clear_service_launching(app, service_id);
+            return Err(error);
+        }
+    };
+    clear_service_launching(app, service_id);
+    let snapshot = build_snapshot(app)?;
+    emit_dashboard_snapshot(app, &snapshot);
+    Ok(ServiceActionResponse { snapshot, issue })
 }
 
 // ---------------------------------------------------------------------------
@@ -904,6 +985,7 @@ pub fn clear_service_logs(app: &AppHandle, service_id: &str) -> Result<ServiceLo
 
 pub fn cleanup_runtime(app: &AppHandle) -> Result<(), String> {
     let supervisor = app.state::<RuntimeSupervisor>();
+    supervisor.launching.lock().unwrap().clear();
     let mut procs = supervisor.processes.lock().unwrap();
     for (_sid, mut entry) in procs.drain() {
         let pid = entry.child.id();
@@ -915,6 +997,54 @@ pub fn cleanup_runtime(app: &AppHandle) -> Result<(), String> {
         let _ = entry.child.wait();
     }
     Ok(())
+}
+
+pub(crate) fn mark_service_launching(app: &AppHandle, service_id: &str) {
+    let supervisor = app.state::<RuntimeSupervisor>();
+    supervisor
+        .launching
+        .lock()
+        .unwrap()
+        .insert(service_id.to_string());
+}
+
+pub(crate) fn clear_service_launching(app: &AppHandle, service_id: &str) {
+    let supervisor = app.state::<RuntimeSupervisor>();
+    supervisor.launching.lock().unwrap().remove(service_id);
+}
+
+fn stop_service_process(
+    app: &AppHandle,
+    service_id: &str,
+    clear_launching: bool,
+) -> Result<(), String> {
+    let supervisor = app.state::<RuntimeSupervisor>();
+
+    if clear_launching {
+        let mut launching = supervisor.launching.lock().unwrap();
+        launching.remove(service_id);
+        let mut procs = supervisor.processes.lock().unwrap();
+        if let Some(entry) = procs.remove(service_id) {
+            terminate_process_entry(entry);
+        }
+        return Ok(());
+    }
+
+    let mut procs = supervisor.processes.lock().unwrap();
+    if let Some(entry) = procs.remove(service_id) {
+        terminate_process_entry(entry);
+    }
+    Ok(())
+}
+
+fn terminate_process_entry(mut entry: ProcessEntry) {
+    let pid = entry.child.id();
+    #[cfg(target_os = "windows")]
+    {
+        let _ = kill_process_tree(pid);
+    }
+    let _ = entry.child.kill();
+    let _ = entry.child.wait();
 }
 
 // ---------------------------------------------------------------------------
@@ -1023,6 +1153,18 @@ mod tests {
         .expect("expected blocking signal");
 
         assert_eq!(signal.code, "DEPENDENCY_RESOLUTION_FAILED");
+    }
+
+    #[test]
+    fn detects_prisma_database_bootstrap_failures_as_blocking() {
+        let signal = detect_blocking_signal(
+            "stderr",
+            "PrismaClientInitializationError: Can't reach database server at `localhost:5432`",
+        )
+        .expect("expected blocking signal");
+
+        assert_eq!(signal.code, "DATABASE_BOOTSTRAP_FAILED");
+        assert!(!signal.port_conflict);
     }
 
     #[test]

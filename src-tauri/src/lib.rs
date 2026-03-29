@@ -108,18 +108,48 @@ fn update_service_order(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn run_service(app: AppHandle, service_id: String) -> Result<RunServiceResponse, String> {
-    storage::run_service(&app, &service_id).map_err(|e| e.to_string())
+async fn run_service(app: AppHandle, service_id: String) -> Result<RunServiceResponse, String> {
+    storage::mark_service_launching(&app, &service_id);
+    storage::emit_dashboard_update(&app);
+
+    let app_handle = app.clone();
+    let run_service_id = service_id.clone();
+    tauri::async_runtime::spawn_blocking(move || storage::run_service(&app_handle, &run_service_id))
+        .await
+        .map_err(|error| {
+            storage::clear_service_launching(&app, &service_id);
+            storage::emit_dashboard_update(&app);
+            error.to_string()
+        })?
 }
 
 #[tauri::command]
-fn stop_service(app: AppHandle, service_id: String) -> Result<ServiceActionResponse, String> {
-    storage::stop_service(&app, &service_id).map_err(|e| e.to_string())
+async fn stop_service(app: AppHandle, service_id: String) -> Result<ServiceActionResponse, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || storage::stop_service(&app_handle, &service_id))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn restart_service(app: AppHandle, service_id: String) -> Result<ServiceActionResponse, String> {
-    storage::restart_service(&app, &service_id).map_err(|e| e.to_string())
+async fn restart_service(
+    app: AppHandle,
+    service_id: String,
+) -> Result<ServiceActionResponse, String> {
+    storage::mark_service_launching(&app, &service_id);
+    storage::emit_dashboard_update(&app);
+
+    let app_handle = app.clone();
+    let restart_service_id = service_id.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        storage::restart_service(&app_handle, &restart_service_id)
+    })
+    .await
+    .map_err(|error| {
+        storage::clear_service_launching(&app, &service_id);
+        storage::emit_dashboard_update(&app);
+        error.to_string()
+    })?
 }
 
 // ---------------------------------------------------------------------------
@@ -151,8 +181,11 @@ fn open_service_terminal(app: AppHandle, service_id: String) -> Result<(), Strin
 }
 
 #[tauri::command]
-fn kill_process_on_port(app: AppHandle, port: u16) -> Result<PortKillResponse, String> {
-    storage::kill_process_on_port(&app, port).map_err(|e| e.to_string())
+async fn kill_process_on_port(app: AppHandle, port: u16) -> Result<PortKillResponse, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || storage::kill_process_on_port(&app_handle, port))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

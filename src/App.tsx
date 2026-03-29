@@ -154,6 +154,7 @@ export default function App() {
   const logViewportRef = useRef<HTMLDivElement | null>(null);
   const graphLayoutRef = useRef<HTMLDivElement | null>(null);
   const topologySaveTimerRef = useRef<number | null>(null);
+  const snapshotRef = useRef<DashboardSnapshot>(emptySnapshot());
 
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
   const [topology, setTopology] = useState<ProjectTopology | null>(null);
@@ -165,6 +166,8 @@ export default function App() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isPendingAction, setIsPendingAction] = useState(false);
+  const [isPortKillPending, setIsPortKillPending] = useState(false);
+  const [isRunAllPending, setIsRunAllPending] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [view, setView] = useState<AppView>("graph");
   const [focusedServiceId, setFocusedServiceId] = useState<string | null>(null);
@@ -214,6 +217,10 @@ export default function App() {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
     }, 280);
   }, []);
+
+  useEffect(() => {
+    snapshotRef.current = snapshot;
+  }, [snapshot]);
 
   const activeProject = useMemo(
     () => snapshot.projects.find((project) => project.isActive) ?? null,
@@ -840,22 +847,35 @@ export default function App() {
   }, [addToast, focusedServiceId]);
 
   const handleRunAll = useCallback(async () => {
-    const stoppable = snapshot.services.filter((service) => service.status === "stopped" || service.status === "error");
+    if (isRunAllPending) return;
+    const stoppable = snapshot.services.filter(
+      (service) => service.status === "stopped" || (service.status === "error" && service.pid == null),
+    );
     if (stoppable.length === 0) {
       addToast("info", "No nodes are ready to start.");
       return;
     }
+    setIsRunAllPending(true);
     addToast("info", `Starting ${stoppable.length} nodes...`);
-    for (const service of stoppable) {
-      try {
-        const response = await runService(service.id);
-        setSnapshot(response.snapshot);
-      } catch (error) {
-        addToast("error", `Failed to start ${service.name}.`, String(error));
+    try {
+      for (const service of stoppable) {
+        const currentService = snapshotRef.current.services.find((item) => item.id === service.id);
+        const isStartable = currentService != null
+          && (currentService.status === "stopped" || (currentService.status === "error" && currentService.pid == null));
+        if (!isStartable) continue;
+
+        try {
+          const response = await runService(service.id);
+          setSnapshot(response.snapshot);
+        } catch (error) {
+          addToast("error", `Failed to start ${service.name}.`, String(error));
+        }
       }
+      addToast("success", "Bulk start finished.");
+    } finally {
+      setIsRunAllPending(false);
     }
-    addToast("success", "Bulk start finished.");
-  }, [addToast, snapshot.services]);
+  }, [addToast, isRunAllPending, snapshot.services]);
 
   const handleStopAll = useCallback(async () => {
     const runningServices = snapshot.services.filter((service) =>
@@ -880,6 +900,7 @@ export default function App() {
   }, [addToast, snapshot.services]);
 
   const handleKillPort = useCallback(async () => {
+    if (isPortKillPending) return;
     const rawPort = portKillValue.trim();
     const port = Number.parseInt(rawPort, 10);
     if (!rawPort || !Number.isInteger(port) || port < 1 || port > 65535) {
@@ -887,7 +908,7 @@ export default function App() {
       return;
     }
 
-    setIsPendingAction(true);
+    setIsPortKillPending(true);
     try {
       const response = await killProcessOnPort(port);
       setSnapshot(response.snapshot);
@@ -909,9 +930,9 @@ export default function App() {
     } catch (error) {
       addToast("error", "No fue posible matar el proceso por puerto.", String(error));
     } finally {
-      setIsPendingAction(false);
+      setIsPortKillPending(false);
     }
-  }, [addToast, portKillValue]);
+  }, [addToast, isPortKillPending, portKillValue]);
 
   async function handleSaveSettings(event: FormEvent) {
     event.preventDefault();
@@ -944,6 +965,7 @@ export default function App() {
         system={snapshot.system}
         activeProjectStats={activeProjectStats}
         isPendingAction={isPendingAction}
+        isPortKillPending={isPortKillPending}
         currentView={view}
         portKillValue={portKillValue}
         onViewChange={setView}
@@ -975,6 +997,7 @@ export default function App() {
                 nodes={flowNodes}
                 edges={edges}
                 isPendingAction={isPendingAction}
+                isRunAllPending={isRunAllPending}
                 onAddService={() => {
                   setEditingService(null);
                   setServiceForm(emptyServiceForm);

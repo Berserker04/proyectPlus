@@ -102,18 +102,21 @@ Estado actual:
 - `T2.1.1` completada.
 - `T2.1.2` completada.
 - `T2.1.3` completada.
+- `T2.1.4` completada.
+- `T2.1.5` completada.
 
 Criterios de aceptacion:
 - Un servicio detenido muestra `Run` como accion principal.
 - Al iniciar, el estado cambia a `starting` y luego a `running` o `error`.
 - La app correlaciona servicio, PID y puerto detectado.
+- La UI se mantiene interactiva mientras `Run`, `Restart` o `Start all` disparan el runtime.
 
 Dependencias:
 - `US1.2`
 - `US1.3`
 
 Trazabilidad:
-- Roadmap: `T2.1.1`, `T2.1.2`, `T2.1.3`
+- Roadmap: `T2.1.1`, `T2.1.2`, `T2.1.3`, `T2.1.4`, `T2.1.5`
 - Area: `areas/operations/README.md`
 
 ### [x] US2.2 - Detener y reiniciar servicios supervisados
@@ -144,6 +147,7 @@ Estado actual:
 - `T2.3.1` completada.
 - `T2.3.2` completada.
 - `T2.3.3` completada.
+- `T2.3.4` completada.
 
 Criterios de aceptacion:
 - La UI permite abrir carpeta y terminal en la carpeta del servicio.
@@ -619,3 +623,45 @@ Dependencias:
 
 Trazabilidad:
 - Roadmap: `SC-025`
+
+### [x] SC-027 - Bootstrap fallido por base de datos bajo watchers
+Objetivo: reflejar como fallo real del nodo los arranques que dejan vivo el watcher pero nunca levantan el servicio por errores bloqueantes de base de datos.
+
+Estado actual:
+- errores tipo `PrismaClientInitializationError` o `P1001` ahora se clasifican como bloqueo de bootstrap en el runtime
+- si el watcher queda vivo pero el servicio no llega a abrir listener TCP local, el nodo pasa a rojo y expone issue estructurado
+- la deteccion queda cubierta por tests unitarios en `storage/runtime`
+
+Criterios de aceptacion:
+- un `nest start --watch` que falle al conectar PostgreSQL u otra dependencia Prisma bloqueante no permanece visualmente en `running`
+- el nodo conserva acciones operativas (`Stop` y `Restart`) mientras el wrapper siga supervisado
+- el comportamiento no reintroduce falsos rojos para logs no bloqueantes de negocio
+
+Dependencias:
+- `US2.1`
+- `US3.3`
+- `SC-025`
+
+Trazabilidad:
+- Roadmap: `SC-027`
+
+### [x] SC-028 - Port tools no bloqueante
+Objetivo: liberar puertos ocupados desde el sidebar sin congelar acciones del dashboard ni meter trabajo pesado en el hilo critico de Tauri.
+
+Estado actual:
+- `kill_process_on_port` ahora corre en `spawn_blocking` igual que otras acciones runtime pesadas.
+- Cuando el puerto pertenece a nodos supervisados, la limpieza reutiliza el cierre interno del supervisor sin recomponer snapshots por cada servicio afectado.
+- La UI mantiene un pending aislado para `Port tools`, de modo que liberar un puerto no deshabilita otras acciones del canvas o del inspector.
+
+Criterios de aceptacion:
+- Disparar `Kill` desde `Port tools` no bloquea el hilo critico de Tauri mientras corre `taskkill` o la resincronizacion del supervisor.
+- La UI sigue permitiendo acciones no relacionadas mientras el kill por puerto esta en curso.
+- Si el puerto pertenece a nodos supervisados, el dashboard queda resincronizado con un solo snapshot final.
+
+Dependencias:
+- `US2.3`
+- `SC-023`
+- `SC-026`
+
+Trazabilidad:
+- Roadmap: `SC-028`

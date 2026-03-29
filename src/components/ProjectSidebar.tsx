@@ -12,6 +12,7 @@ interface ProjectSidebarProps {
   system: SystemMetrics;
   activeProjectStats: ProjectStats;
   isPendingAction: boolean;
+  isPortKillPending: boolean;
   currentView: "graph" | "settings";
   portKillValue: string;
   onViewChange: (view: "graph" | "settings") => void;
@@ -114,12 +115,12 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
           placeholder="Port"
           value={props.portKillValue}
           onChange={(event) => props.onPortKillValueChange(event.target.value)}
-          disabled={props.isPendingAction}
+          disabled={props.isPendingAction || props.isPortKillPending}
         />
         <button
           className="btn-outline danger sidebar-port-button"
           type="submit"
-          disabled={props.isPendingAction || props.portKillValue.trim().length === 0}
+          disabled={props.isPendingAction || props.isPortKillPending || props.portKillValue.trim().length === 0}
         >
           Kill
         </button>

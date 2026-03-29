@@ -1,10 +1,6 @@
 import { useState } from "react";
 import type { Microservice, ServiceStatus } from "@/lib/domain/models";
 
-// ---------------------------------------------------------------------------
-// Shared display maps (también exportados para usar en otros componentes)
-// ---------------------------------------------------------------------------
-
 export const statusLabel: Record<ServiceStatus, string> = {
   running: "Activo",
   starting: "Iniciando",
@@ -21,10 +17,6 @@ export const statusColor: Record<ServiceStatus, string> = {
   external: "var(--status-external)",
 };
 
-// ---------------------------------------------------------------------------
-// Helpers de formato
-// ---------------------------------------------------------------------------
-
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -35,10 +27,6 @@ function formatBytes(bytes: number): string {
 function formatPercent(n: number): string {
   return `${n.toFixed(1)}%`;
 }
-
-// ---------------------------------------------------------------------------
-// ServiceCard
-// ---------------------------------------------------------------------------
 
 export interface ServiceCardProps {
   svc: Microservice;
@@ -54,7 +42,6 @@ export interface ServiceCardProps {
   onTerminal: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-  // Drag and drop
   isDragged?: boolean;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -63,14 +50,28 @@ export interface ServiceCardProps {
 }
 
 export function ServiceCard({
-  svc, isFocused, onFocus, onRun, onStop, onRestart,
-  onEdit, onDelete, onLogs, onFolder, onTerminal,
-  onMoveUp, onMoveDown,
-  isDragged, onDragStart, onDragOver, onDrop, onDragEnd,
+  svc,
+  isFocused,
+  onFocus,
+  onRun,
+  onStop,
+  onRestart,
+  onEdit,
+  onDelete,
+  onLogs,
+  onFolder,
+  onTerminal,
+  onMoveUp,
+  onMoveDown,
+  isDragged,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: ServiceCardProps) {
-  const isRunning = svc.status === "running";
   const isExternal = svc.status === "external";
-  const isStopped = svc.status === "stopped" || (svc.status === "error" && svc.pid == null);
+  const isStartable = svc.status === "stopped" || (svc.status === "error" && svc.pid == null);
+  const isStoppable = svc.status === "running" || svc.status === "starting" || (svc.status === "error" && svc.pid != null);
 
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -80,7 +81,9 @@ export function ServiceCard({
       onClick={onFocus}
       draggable
       onDragStart={onDragStart}
-      onDragEnter={(e) => { e.preventDefault(); }}
+      onDragEnter={(e) => {
+        e.preventDefault();
+      }}
       onDragOver={(e) => {
         e.preventDefault();
         setIsDragOver(true);
@@ -94,7 +97,6 @@ export function ServiceCard({
       }}
       onDragEnd={onDragEnd}
     >
-      {/* Header */}
       <div className="sc-header">
         <div className="sc-name-row">
           <span className="status-dot" style={{ background: statusColor[svc.status] }} />
@@ -103,13 +105,10 @@ export function ServiceCard({
         </div>
         <div className="sc-meta">
           {svc.pid && <span className="sc-chip">PID {svc.pid}</span>}
-          {svc.detectedPort && (
-            <span className="sc-chip">:{svc.detectedPort}</span>
-          )}
+          {svc.detectedPort && <span className="sc-chip">:{svc.detectedPort}</span>}
         </div>
       </div>
 
-      {/* Metrics */}
       <div className="sc-metrics">
         <div className="sc-metric">
           <span className="metric-label">CPU</span>
@@ -122,7 +121,7 @@ export function ServiceCard({
         <div className="sc-metric sc-metric-wide">
           <span className="metric-label">Directorio</span>
           <span className="metric-value metric-path" title={svc.workingDirectory}>
-            {svc.workingDirectory.split(/[\\\/]/).pop() ?? svc.workingDirectory}
+            {svc.workingDirectory.split(/[\\/]/).pop() ?? svc.workingDirectory}
           </span>
         </div>
       </div>
@@ -137,12 +136,11 @@ export function ServiceCard({
         </div>
       )}
 
-      {/* Actions */}
       <div className="sc-actions">
         <div className="sc-actions-runtime">
-          <button className="btn-icon-run" title="Correr" disabled={isRunning || isExternal} onClick={(e) => { e.stopPropagation(); onRun(); }}>▶</button>
-          <button className="btn-icon-stop" title="Detener" disabled={isStopped || isExternal} onClick={(e) => { e.stopPropagation(); onStop(); }}>■</button>
-          <button className="btn-icon-restart" title="Reiniciar" disabled={isExternal} onClick={(e) => { e.stopPropagation(); onRestart(); }}>↺</button>
+          <button className="btn-icon-run" title="Correr" disabled={!isStartable || isExternal} onClick={(e) => { e.stopPropagation(); onRun(); }}>▶</button>
+          <button className="btn-icon-stop" title="Detener" disabled={!isStoppable || isExternal} onClick={(e) => { e.stopPropagation(); onStop(); }}>■</button>
+          <button className="btn-icon-restart" title="Reiniciar" disabled={isExternal || svc.status === "starting"} onClick={(e) => { e.stopPropagation(); onRestart(); }}>↺</button>
         </div>
         <div className="sc-actions-util">
           <button className="icon-btn" title="Subir orden" onClick={(e) => { e.stopPropagation(); onMoveUp(); }}>↑</button>

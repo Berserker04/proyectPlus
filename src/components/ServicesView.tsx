@@ -5,6 +5,7 @@ interface ServicesViewProps {
   services: Microservice[];
   activeProject: Project | null;
   isPendingAction: boolean;
+  isRunAllPending: boolean;
   focusedServiceId: string | null;
   draggedServiceId: string | null;
   onFocusService: (id: string) => void;
@@ -31,6 +32,7 @@ export function ServicesView({
   services,
   activeProject,
   isPendingAction,
+  isRunAllPending,
   focusedServiceId,
   draggedServiceId,
   onFocusService,
@@ -69,7 +71,7 @@ export function ServicesView({
               <button
                 className="btn-outline"
                 onClick={onRunAll}
-                disabled={isPendingAction}
+                disabled={isPendingAction || isRunAllPending}
                 title="Iniciar todos los servicios detenidos"
               >
                 ▶ Iniciar todos

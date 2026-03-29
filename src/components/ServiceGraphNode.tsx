@@ -20,8 +20,8 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
   const { service } = data;
   const telemetry = data.telemetry ?? buildPressureTelemetry(service);
   const port = service.detectedPort;
-  const isStopped = service.status === "stopped" || (service.status === "error" && service.pid == null);
-  const isRunning = service.status === "running";
+  const isStartable = service.status === "stopped" || (service.status === "error" && service.pid == null);
+  const isStoppable = service.status === "running" || service.status === "starting" || (service.status === "error" && service.pid != null);
   const isExternal = service.status === "external";
   const pressureLabel = getPressureLabel(telemetry.pressureTone);
 
@@ -78,7 +78,7 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
             <button
               className="flow-action primary nodrag nopan"
               type="button"
-              disabled={isRunning || isExternal}
+              disabled={!isStartable || isExternal}
               onClick={(event) => {
                 event.stopPropagation();
                 data.onFocus(service.id);
@@ -90,7 +90,7 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
             <button
               className="flow-action nodrag nopan"
               type="button"
-              disabled={isStopped || isExternal}
+              disabled={!isStoppable || isExternal}
               onClick={(event) => {
                 event.stopPropagation();
                 data.onFocus(service.id);
@@ -102,7 +102,7 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
             <button
               className="flow-action nodrag nopan"
               type="button"
-              disabled={isExternal}
+              disabled={isExternal || service.status === "starting"}
               onClick={(event) => {
                 event.stopPropagation();
                 data.onFocus(service.id);

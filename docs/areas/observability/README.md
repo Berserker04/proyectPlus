@@ -22,6 +22,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - La severidad de los logs colorea la lectura dentro del inspector, pero ya no fuerza el rojo del nodo por si sola; el canvas reserva el tono critico para fallas bloqueantes reales del runtime.
 - `Start` y `Restart` reinician el buffer visible del servicio enfocado para que la nueva corrida no herede el contexto visual anterior en el inspector.
 - Cuando el servicio corre bajo un watcher que deja un wrapper vivo, observabilidad combina senales de error fatal en logs con ausencia de listener TCP para detectar bootstraps caidos sin depender solo del PID del wrapper.
+- Esa deteccion de bootstrap bloqueante ahora incluye fallas Prisma de inicializacion de base de datos como `PrismaClientInitializationError` o `P1001`, siempre que el servicio no alcance a abrir listener TCP.
 - La UI ya permite buscar dentro del buffer, filtrar por stream, limpiar el buffer, pausar autoscroll y exportar un `.log` manual.
 - La observabilidad ahora se reparte entre `Resumen` e inspector de servicios: la vista ejecutiva concentra salud global, focos y hotspots, mientras logs e historial quedan dentro del contexto del servicio seleccionado.
 - El rediseño mantiene el mismo polling y fuentes de telemetria, pero mejora la jerarquia visual con cards de metricas, chips de estado y paneles de incidencias.
@@ -76,6 +77,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-022`: el canvas dejo de tratar la severidad de logs o la presion alta como criterio de rojo; ahora el tono critico solo representa fallas reales del runtime, y cada `Start`/`Restart` limpia el buffer visible del inspector antes de la nueva corrida.
 - `SC-024`: el canvas vuelve a escalar a rojo cuando el buffer contiene logs criticos y deja de renderizar el bloque de error dentro del nodo; el detalle textual queda en inspector y toasts para no contaminar el grafo.
 - `SC-025`: se retiro el falso positivo visual de `SC-024`; un nodo vivo ya no entra en rojo por cualquier `ERROR` o `stderr`, y el rojo vuelve a significar fallo bloqueante real del servicio.
+- `SC-027`: los fallos de bootstrap por Prisma o conectividad de base de datos ahora cuentan como bloqueo real bajo watchers tipo `nest start --watch`, evitando que el nodo quede falso-`running` cuando nunca abrio el puerto.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

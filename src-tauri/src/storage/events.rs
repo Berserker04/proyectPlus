@@ -9,6 +9,8 @@
 use std::{sync::Mutex, thread, time::Duration};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::models::DashboardSnapshot;
+
 use super::db::build_snapshot;
 
 // ---------------------------------------------------------------------------
@@ -46,7 +48,7 @@ pub fn start_background_ticker(app: AppHandle) {
         };
         thread::sleep(Duration::from_millis(ms));
         if let Ok(snapshot) = build_snapshot(&app) {
-            let _ = app.emit("dashboard-update", snapshot);
+            emit_dashboard_snapshot(&app, &snapshot);
         }
     });
 }
@@ -57,8 +59,12 @@ pub fn start_background_ticker(app: AppHandle) {
 
 /// Emite un `dashboard-update` puntual. Llamado desde run/stop/restart
 /// para actualizar la UI inmediatamente después de una acción.
+pub fn emit_dashboard_snapshot(app: &AppHandle, snapshot: &DashboardSnapshot) {
+    let _ = app.emit("dashboard-update", snapshot.clone());
+}
+
 pub fn emit_dashboard_update(app: &AppHandle) {
     if let Ok(snapshot) = build_snapshot(app) {
-        let _ = app.emit("dashboard-update", snapshot);
+        emit_dashboard_snapshot(app, &snapshot);
     }
 }

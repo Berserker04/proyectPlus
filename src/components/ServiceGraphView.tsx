@@ -23,6 +23,7 @@ interface ServiceGraphViewProps {
   nodes: Array<Node<ServiceGraphNodeData>>;
   edges: Array<Edge<ServiceFlowEdgeData>>;
   isPendingAction: boolean;
+  isRunAllPending: boolean;
   onAddService: () => void;
   onRunAll: () => void;
   onStopAll: () => void;
@@ -63,7 +64,7 @@ function ServiceGraphViewInner(props: ServiceGraphViewProps) {
           </p>
           {props.activeProject && props.services.length > 0 && (
             <div className="bulk-actions">
-              <button className="btn-outline" onClick={props.onRunAll} disabled={props.isPendingAction}>
+              <button className="btn-outline" onClick={props.onRunAll} disabled={props.isPendingAction || props.isRunAllPending}>
                 Start all
               </button>
               <button className="btn-outline" onClick={props.onStopAll} disabled={props.isPendingAction}>
