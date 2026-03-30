@@ -26,8 +26,10 @@ use std::{
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::db::{build_snapshot, open_db};
-use super::events::{emit_dashboard_snapshot, emit_dashboard_update};
+use super::db::open_db;
+use super::events::{
+    build_dashboard_snapshot, request_dashboard_refresh, DashboardRefreshPriority,
+};
 use super::metrics::is_port_open;
 
 // ---------------------------------------------------------------------------
@@ -56,33 +58,42 @@ struct BlockingSignal {
 
 #[derive(Clone, Default)]
 pub(crate) struct LogBuffer {
-    pub entries: Vec<ServiceLogEntry>,
+    pub entries: VecDeque<ServiceLogEntry>,
     pub sequence: u64,
     pub dropped: u64,
     pub has_error: bool,
     blocking_signal: Option<BlockingSignal>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LogBufferRefreshHint {
+    None,
+    Normal,
+    Urgent,
+}
+
 impl LogBuffer {
-    pub fn append(&mut self, stream: &str, message: String) -> Option<(ServiceLogEntry, bool)> {
-        let Some(message) = sanitize_log_message(&message) else {
-            return None;
-        };
+    fn append(
+        &mut self,
+        stream: &str,
+        message: String,
+    ) -> Option<(ServiceLogEntry, LogBufferRefreshHint)> {
+        let message = sanitize_log_message(&message)?;
         let level = detect_log_level(stream, &message);
-        let mut notify_dashboard = false;
+        let mut refresh_hint = LogBufferRefreshHint::None;
         if !self.has_error && level == "error" {
             self.has_error = true;
-            notify_dashboard = true;
+            refresh_hint = LogBufferRefreshHint::Normal;
         }
         if self.blocking_signal.is_none() {
             if let Some(signal) = detect_blocking_signal(stream, &message) {
                 self.blocking_signal = Some(signal);
-                notify_dashboard = true;
+                refresh_hint = LogBufferRefreshHint::Urgent;
             }
         }
         self.sequence += 1;
         if self.entries.len() >= MAX_LOG_ENTRIES {
-            self.entries.remove(0);
+            self.entries.pop_front();
             self.dropped += 1;
         }
         let entry = ServiceLogEntry {
@@ -92,8 +103,8 @@ impl LogBuffer {
             level: level.to_string(),
             message,
         };
-        self.entries.push(entry.clone());
-        Some((entry, notify_dashboard))
+        self.entries.push_back(entry.clone());
+        Some((entry, refresh_hint))
     }
 }
 
@@ -793,14 +804,24 @@ fn spawn_service_process(
                 let app_clone = app.clone();
                 let sid = service_id.to_string();
                 thread::spawn(move || {
-                    for line in BufReader::new(out).lines().flatten() {
+                    for line in BufReader::new(out).lines().map_while(Result::ok) {
                         let mut locked = buf.lock().unwrap();
-                        if let Some((entry, promoted_to_error)) = locked.append("stdout", line) {
+                        if let Some((entry, refresh_hint)) = locked.append("stdout", line) {
                             drop(locked);
                             emit_log_line(&app_clone, &sid, entry);
-                            if promoted_to_error {
-                                if let Ok(snapshot) = build_snapshot(&app_clone) {
-                                    emit_dashboard_snapshot(&app_clone, &snapshot);
+                            match refresh_hint {
+                                LogBufferRefreshHint::None => {}
+                                LogBufferRefreshHint::Normal => {
+                                    request_dashboard_refresh(
+                                        &app_clone,
+                                        DashboardRefreshPriority::Normal,
+                                    );
+                                }
+                                LogBufferRefreshHint::Urgent => {
+                                    request_dashboard_refresh(
+                                        &app_clone,
+                                        DashboardRefreshPriority::Urgent,
+                                    );
                                 }
                             }
                         }
@@ -814,14 +835,24 @@ fn spawn_service_process(
                 let app_clone = app.clone();
                 let sid = service_id.to_string();
                 thread::spawn(move || {
-                    for line in BufReader::new(err).lines().flatten() {
+                    for line in BufReader::new(err).lines().map_while(Result::ok) {
                         let mut locked = buf.lock().unwrap();
-                        if let Some((entry, promoted_to_error)) = locked.append("stderr", line) {
+                        if let Some((entry, refresh_hint)) = locked.append("stderr", line) {
                             drop(locked);
                             emit_log_line(&app_clone, &sid, entry);
-                            if promoted_to_error {
-                                if let Ok(snapshot) = build_snapshot(&app_clone) {
-                                    emit_dashboard_snapshot(&app_clone, &snapshot);
+                            match refresh_hint {
+                                LogBufferRefreshHint::None => {}
+                                LogBufferRefreshHint::Normal => {
+                                    request_dashboard_refresh(
+                                        &app_clone,
+                                        DashboardRefreshPriority::Normal,
+                                    );
+                                }
+                                LogBufferRefreshHint::Urgent => {
+                                    request_dashboard_refresh(
+                                        &app_clone,
+                                        DashboardRefreshPriority::Urgent,
+                                    );
                                 }
                             }
                         }
@@ -863,8 +894,7 @@ pub fn run_service(app: &AppHandle, service_id: &str) -> Result<RunServiceRespon
         }
     };
     clear_service_launching(app, service_id);
-    let snapshot = build_snapshot(app)?;
-    emit_dashboard_snapshot(app, &snapshot);
+    let snapshot = build_dashboard_snapshot(app)?;
     Ok(RunServiceResponse { snapshot, issue })
 }
 
@@ -898,8 +928,7 @@ pub fn kill_process_on_port(app: &AppHandle, port: u16) -> Result<PortKillRespon
         kill_process_tree(pid)?;
     }
 
-    let snapshot = build_snapshot(app)?;
-    emit_dashboard_snapshot(app, &snapshot);
+    let snapshot = build_dashboard_snapshot(app)?;
 
     Ok(PortKillResponse {
         snapshot,
@@ -916,8 +945,7 @@ pub fn kill_process_on_port(_app: &AppHandle, _port: u16) -> Result<PortKillResp
 
 pub fn stop_service(app: &AppHandle, service_id: &str) -> Result<ServiceActionResponse, String> {
     stop_service_process(app, service_id, true)?;
-    let snapshot = build_snapshot(app)?;
-    emit_dashboard_snapshot(app, &snapshot);
+    let snapshot = build_dashboard_snapshot(app)?;
     Ok(ServiceActionResponse {
         snapshot,
         issue: None,
@@ -934,8 +962,7 @@ pub fn restart_service(app: &AppHandle, service_id: &str) -> Result<ServiceActio
         }
     };
     clear_service_launching(app, service_id);
-    let snapshot = build_snapshot(app)?;
-    emit_dashboard_snapshot(app, &snapshot);
+    let snapshot = build_dashboard_snapshot(app)?;
     Ok(ServiceActionResponse { snapshot, issue })
 }
 
@@ -948,7 +975,7 @@ pub fn get_service_logs(app: &AppHandle, service_id: &str) -> Result<ServiceLogS
     let procs = supervisor.processes.lock().unwrap();
     let (entries, dropped) = if let Some(entry) = procs.get(service_id) {
         let buf = entry.log_buf.lock().unwrap();
-        (buf.entries.clone(), buf.dropped)
+        (buf.entries.iter().cloned().collect(), buf.dropped)
     } else {
         (vec![], 0)
     };
@@ -970,7 +997,7 @@ pub fn clear_service_logs(app: &AppHandle, service_id: &str) -> Result<ServiceLo
         buf.has_error = false;
     }
     drop(procs);
-    emit_dashboard_update(app);
+    request_dashboard_refresh(app, DashboardRefreshPriority::Normal);
     Ok(ServiceLogSnapshot {
         service_id: service_id.to_string(),
         entries: vec![],
@@ -1090,7 +1117,10 @@ fn split_command(cmd: &str) -> (String, Vec<String>) {
 mod tests {
     #[cfg(target_os = "windows")]
     use super::listener_pids_for_port;
-    use super::{detect_blocking_signal, detect_log_level, sanitize_log_message};
+    use super::{
+        detect_blocking_signal, detect_log_level, sanitize_log_message, LogBuffer,
+        LogBufferRefreshHint, MAX_LOG_ENTRIES,
+    };
     #[cfg(target_os = "windows")]
     use std::collections::HashMap;
 
@@ -1177,6 +1207,39 @@ mod tests {
 
         assert_eq!(signal.code, "PORT_IN_USE");
         assert!(signal.port_conflict);
+    }
+
+    #[test]
+    fn log_buffer_keeps_only_the_latest_entries() {
+        let mut buffer = LogBuffer::default();
+
+        for index in 0..(MAX_LOG_ENTRIES + 5) {
+            let _ = buffer.append("stdout", format!("line {index}"));
+        }
+
+        assert_eq!(buffer.entries.len(), MAX_LOG_ENTRIES);
+        assert_eq!(buffer.dropped, 5);
+        assert_eq!(
+            buffer.entries.front().map(|entry| entry.message.as_str()),
+            Some("line 5")
+        );
+        assert_eq!(
+            buffer.entries.back().map(|entry| entry.message.as_str()),
+            Some("line 2004")
+        );
+    }
+
+    #[test]
+    fn log_buffer_marks_blocking_signals_as_urgent_refreshes() {
+        let mut buffer = LogBuffer::default();
+        let (_, refresh_hint) = buffer
+            .append(
+                "stderr",
+                "Error: listen EADDRINUSE: address already in use :::3012".to_string(),
+            )
+            .expect("expected log entry");
+
+        assert_eq!(refresh_hint, LogBufferRefreshHint::Urgent);
     }
 
     #[cfg(target_os = "windows")]

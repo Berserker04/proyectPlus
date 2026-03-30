@@ -19,6 +19,7 @@ import type {
   Microservice,
   Project,
   ProjectTopology,
+  ServiceLogEntry,
   ServiceLogSnapshot,
   ServiceNodeLayout,
 } from "@/lib/domain/models";
@@ -71,6 +72,10 @@ const MIN_INSPECTOR_WIDTH = 320;
 const MIN_GRAPH_WIDTH = 420;
 const INSPECTOR_WIDTH_STORAGE_KEY = "mscc.inspector.width";
 const LOG_META_VISIBLE_STORAGE_KEY = "mscc.logs.meta.visible";
+const MAX_LIVE_LOG_ENTRIES = 2_000;
+const LOG_BATCH_DELAY_MS = 32;
+const LOG_ROW_ESTIMATE = 32;
+const LOG_WINDOW_OVERSCAN = 40;
 
 function isEdgeDeleteKey(event: KeyboardEvent): boolean {
   return event.key === "Delete" || event.key === "Del" || event.code === "Delete";
@@ -116,6 +121,49 @@ function buildDefaultLayout(index: number): ServiceNodeLayout {
   };
 }
 
+function areLayoutsEqual(left: ServiceNodeLayout, right: ServiceNodeLayout) {
+  return left.x === right.x
+    && left.y === right.y
+    && (left.width ?? null) === (right.width ?? null)
+    && (left.height ?? null) === (right.height ?? null)
+    && Boolean(left.collapsed) === Boolean(right.collapsed);
+}
+
+function areIssuesEqual(
+  left: Microservice["issue"] | null | undefined,
+  right: Microservice["issue"] | null | undefined,
+) {
+  if (left == null || right == null) return left == null && right == null;
+  return left.serviceId === right.serviceId
+    && left.code === right.code
+    && left.title === right.title
+    && left.message === right.message
+    && (left.detail ?? null) === (right.detail ?? null);
+}
+
+function areServicesEqual(left: Microservice, right: Microservice) {
+  return left.id === right.id
+    && left.projectId === right.projectId
+    && left.kind === right.kind
+    && left.name === right.name
+    && left.workingDirectory === right.workingDirectory
+    && left.startCommand === right.startCommand
+    && left.expectedPort === right.expectedPort
+    && left.detectedPort === right.detectedPort
+    && left.status === right.status
+    && left.pid === right.pid
+    && left.cpuPercent === right.cpuPercent
+    && left.memoryBytes === right.memoryBytes
+    && left.hasLogError === right.hasLogError
+    && left.lastSignal === right.lastSignal
+    && left.portConflict === right.portConflict
+    && left.createdAt === right.createdAt
+    && left.updatedAt === right.updatedAt
+    && areIssuesEqual(left.issue, right.issue)
+    && ((left.graph == null && right.graph == null)
+      || (left.graph != null && right.graph != null && areLayoutsEqual(left.graph, right.graph)));
+}
+
 function buildGraphNode(args: {
   service: Microservice;
   layout: ServiceNodeLayout;
@@ -155,6 +203,8 @@ export default function App() {
   const graphLayoutRef = useRef<HTMLDivElement | null>(null);
   const topologySaveTimerRef = useRef<number | null>(null);
   const snapshotRef = useRef<DashboardSnapshot>(emptySnapshot());
+  const pendingLogEntriesRef = useRef<ServiceLogEntry[]>([]);
+  const logFlushTimerRef = useRef<number | null>(null);
 
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
   const [topology, setTopology] = useState<ProjectTopology | null>(null);
@@ -186,6 +236,7 @@ export default function App() {
   const [logQuery, setLogQuery] = useState("");
   const deferredLogQuery = useDeferredValue(logQuery);
   const [logFilter, setLogFilter] = useState<"all" | "stdout" | "stderr">("all");
+  const [logViewportMetrics, setLogViewportMetrics] = useState({ scrollTop: 0, height: 0 });
 
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -242,29 +293,59 @@ export default function App() {
     return { total: snapshot.services.length, running, errors };
   }, [snapshot.services]);
 
-  const visibleLogEntries = useMemo(() => {
-    const entries = logSnapshot?.entries ?? [];
-    const query = deferredLogQuery.trim().toLowerCase();
-    if (!query) return entries;
-    return entries.filter((entry) => entry.message.toLowerCase().includes(query));
-  }, [deferredLogQuery, logSnapshot?.entries]);
-
   const serviceNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const service of snapshot.services) map.set(service.id, service.name);
     return map;
   }, [snapshot.services]);
 
+  const clearPendingLogEntries = useCallback(() => {
+    pendingLogEntriesRef.current = [];
+    if (logFlushTimerRef.current != null) {
+      window.clearTimeout(logFlushTimerRef.current);
+      logFlushTimerRef.current = null;
+    }
+  }, []);
+
+  const flushPendingLogEntries = useCallback(() => {
+    logFlushTimerRef.current = null;
+    if (pendingLogEntriesRef.current.length === 0) return;
+    const incomingEntries = pendingLogEntriesRef.current;
+    pendingLogEntriesRef.current = [];
+
+    setLogSnapshot((current) => {
+      if (!current) return current;
+      const mergedEntries = current.entries.concat(incomingEntries);
+      const droppedEntries = Math.max(0, mergedEntries.length - MAX_LIVE_LOG_ENTRIES);
+      return {
+        ...current,
+        entries: droppedEntries > 0 ? mergedEntries.slice(droppedEntries) : mergedEntries,
+        droppedEntries: current.droppedEntries + droppedEntries,
+        lastUpdatedAt: incomingEntries[incomingEntries.length - 1]?.timestamp ?? current.lastUpdatedAt,
+      };
+    });
+  }, []);
+
+  const schedulePendingLogFlush = useCallback(() => {
+    if (logFlushTimerRef.current != null) return;
+    logFlushTimerRef.current = window.setTimeout(() => {
+      flushPendingLogEntries();
+    }, LOG_BATCH_DELAY_MS);
+  }, [flushPendingLogEntries]);
+
   const loadLogsForService = useCallback(async (serviceId: string) => {
     try {
+      clearPendingLogEntries();
       const next = await getServiceLogs(serviceId);
       setLogSnapshot(next);
+      setLogViewportMetrics({ scrollTop: 0, height: logViewportRef.current?.clientHeight ?? 0 });
     } catch (error) {
       addToast("error", "No fue posible cargar los logs.", String(error));
     }
-  }, [addToast]);
+  }, [addToast, clearPendingLogEntries]);
 
   const resetLogSnapshotForService = useCallback((serviceId: string) => {
+    clearPendingLogEntries();
     setLogSnapshot((current) => {
       if (current?.serviceId !== serviceId) return current;
       return {
@@ -273,6 +354,65 @@ export default function App() {
         droppedEntries: 0,
         lastUpdatedAt: new Date().toISOString(),
       };
+    });
+    setLogViewportMetrics({ scrollTop: 0, height: logViewportRef.current?.clientHeight ?? 0 });
+  }, [clearPendingLogEntries]);
+
+  const filteredLogEntries = useMemo(() => {
+    const entries = logSnapshot?.entries ?? [];
+    const query = deferredLogQuery.trim().toLowerCase();
+    return entries.filter((entry) => {
+      if (logFilter !== "all" && entry.stream !== logFilter) return false;
+      if (!query) return true;
+      return entry.message.toLowerCase().includes(query);
+    });
+  }, [deferredLogQuery, logFilter, logSnapshot?.entries]);
+
+  const renderedLogWindow = useMemo(() => {
+    const totalEntries = filteredLogEntries.length;
+    if (totalEntries === 0) {
+      return {
+        entries: [] as ServiceLogEntry[],
+        totalEntries,
+        topSpacerHeight: 0,
+        bottomSpacerHeight: 0,
+      };
+    }
+
+    const viewportHeight = Math.max(logViewportMetrics.height, LOG_ROW_ESTIMATE * 12);
+    const rowsInView = Math.max(12, Math.ceil(viewportHeight / LOG_ROW_ESTIMATE));
+    const maxWindowSize = rowsInView + LOG_WINDOW_OVERSCAN * 2;
+    let start = 0;
+    let end = totalEntries;
+
+    if (totalEntries > maxWindowSize) {
+      if (isLogAutoscroll) {
+        end = totalEntries;
+        start = Math.max(0, totalEntries - maxWindowSize);
+      } else {
+        const firstVisibleRow = Math.floor(logViewportMetrics.scrollTop / LOG_ROW_ESTIMATE);
+        start = Math.max(0, firstVisibleRow - LOG_WINDOW_OVERSCAN);
+        end = Math.min(totalEntries, firstVisibleRow + rowsInView + LOG_WINDOW_OVERSCAN);
+      }
+    }
+
+    return {
+      entries: filteredLogEntries.slice(start, end),
+      totalEntries,
+      topSpacerHeight: start * LOG_ROW_ESTIMATE,
+      bottomSpacerHeight: Math.max(0, totalEntries - end) * LOG_ROW_ESTIMATE,
+    };
+  }, [filteredLogEntries, isLogAutoscroll, logViewportMetrics.height, logViewportMetrics.scrollTop]);
+
+  const syncLogViewportMetrics = useCallback((viewport?: HTMLDivElement | null) => {
+    const element = viewport ?? logViewportRef.current;
+    if (!element) return;
+    setLogViewportMetrics((current) => {
+      const next = {
+        scrollTop: element.scrollTop,
+        height: element.clientHeight,
+      };
+      return current.scrollTop === next.scrollTop && current.height === next.height ? current : next;
     });
   }, []);
 
@@ -451,15 +591,13 @@ export default function App() {
 
   useEffect(() => {
     if (!focusedServiceId || inspectorTab !== "logs" || view !== "graph" || !isDesktop) return;
+    clearPendingLogEntries();
     void loadLogsForService(focusedServiceId);
     let unlisten: UnlistenFn | undefined;
     listenServiceLogLine((payload) => {
       if (payload.serviceId !== focusedServiceId) return;
-      setLogSnapshot((current) => {
-        if (!current || current.serviceId !== payload.serviceId) return current;
-        const entries = [...current.entries, payload.entry].slice(-2000);
-        return { ...current, entries };
-      });
+      pendingLogEntriesRef.current.push(payload.entry);
+      schedulePendingLogFlush();
     }).then((callback) => {
       unlisten = callback;
     }).catch((error: unknown) => {
@@ -467,15 +605,28 @@ export default function App() {
     });
 
     return () => {
+      clearPendingLogEntries();
       if (unlisten) unlisten();
     };
-  }, [addToast, focusedServiceId, inspectorTab, isDesktop, loadLogsForService, view]);
+  }, [addToast, clearPendingLogEntries, focusedServiceId, inspectorTab, isDesktop, loadLogsForService, schedulePendingLogFlush, view]);
 
   useEffect(() => {
     if (!isLogAutoscroll || !logSnapshot || inspectorTab !== "logs") return;
     const viewport = logViewportRef.current;
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
-  }, [inspectorTab, isLogAutoscroll, logSnapshot]);
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
+      syncLogViewportMetrics(viewport);
+    }
+  }, [inspectorTab, isLogAutoscroll, logSnapshot, syncLogViewportMetrics]);
+
+  useEffect(() => {
+    if (inspectorTab !== "logs" || view !== "graph") return;
+    syncLogViewportMetrics();
+  }, [inspectorTab, renderedLogWindow.totalEntries, syncLogViewportMetrics, view]);
+
+  useEffect(() => () => {
+    clearPendingLogEntries();
+  }, [clearPendingLogEntries]);
 
   useEffect(() => {
     if (!isInspectorResizing) return;
@@ -638,28 +789,58 @@ export default function App() {
     }
   }, [addToast, focusedServiceId, loadLogsForService, resetLogSnapshotForService]);
 
+  const graphNodeActions = useMemo(() => ({
+    onFocus: setFocusedServiceId,
+    onRun: handleRunService,
+    onStop: handleStopService,
+    onRestart: handleRestartService,
+  }), [handleRestartService, handleRunService, handleStopService]);
+
   useEffect(() => {
     const nodeLayouts = topology?.nodeLayouts ?? {};
 
     // Keep React Flow interaction state local so telemetry refreshes do not interrupt dragging.
     setFlowNodes((current) => {
       const previousById = new Map(current.map((node) => [node.id, node]));
-
-      return snapshot.services.map((service, index) => {
+      const nextNodes = snapshot.services.map((service, index) => {
         const layout = nodeLayouts[service.id] ?? service.graph ?? buildDefaultLayout(index);
+        const selected = service.id === focusedServiceId;
+        const previous = previousById.get(service.id);
+        const telemetry = buildPressureTelemetry(service);
+
+        if (
+          previous
+          && previous.selected === selected
+          && previous.position.x === layout.x
+          && previous.position.y === layout.y
+          && previous.data.onFocus === graphNodeActions.onFocus
+          && previous.data.onRun === graphNodeActions.onRun
+          && previous.data.onStop === graphNodeActions.onStop
+          && previous.data.onRestart === graphNodeActions.onRestart
+          && areServicesEqual(previous.data.service, service)
+          && previous.data.telemetry.pressureScore === telemetry.pressureScore
+          && previous.data.telemetry.pressureTone === telemetry.pressureTone
+        ) {
+          return previous;
+        }
+
         return buildGraphNode({
           service,
           layout,
-          selected: service.id === focusedServiceId,
-          previous: previousById.get(service.id),
-          onFocus: setFocusedServiceId,
-          onRun: (item) => void handleRunService(item),
-          onStop: (item) => void handleStopService(item),
-          onRestart: (item) => void handleRestartService(item),
+          selected,
+          previous,
+          onFocus: graphNodeActions.onFocus,
+          onRun: graphNodeActions.onRun,
+          onStop: graphNodeActions.onStop,
+          onRestart: graphNodeActions.onRestart,
         });
       });
+
+      return current.length === nextNodes.length && current.every((node, index) => node === nextNodes[index])
+        ? current
+        : nextNodes;
     });
-  }, [focusedServiceId, handleRestartService, handleRunService, handleStopService, snapshot.services, topology?.nodeLayouts]);
+  }, [focusedServiceId, graphNodeActions, snapshot.services, topology?.nodeLayouts]);
 
   useEffect(() => {
     const currentEdgeIds = new Set((topology?.edges ?? []).map((edge) => edge.id));
@@ -1050,7 +1231,10 @@ export default function App() {
               logQuery={logQuery}
               isLogAutoscroll={isLogAutoscroll}
               showLogMeta={showLogMeta}
-              visibleLogEntries={visibleLogEntries}
+              renderedLogEntries={renderedLogWindow.entries}
+              totalLogEntries={renderedLogWindow.totalEntries}
+              logTopSpacerHeight={renderedLogWindow.topSpacerHeight}
+              logBottomSpacerHeight={renderedLogWindow.bottomSpacerHeight}
               onFilterChange={setLogFilter}
               onQueryChange={setLogQuery}
               onToggleAutoscroll={() => setIsLogAutoscroll((current) => !current)}
@@ -1058,6 +1242,7 @@ export default function App() {
               onCopyLogs={handleCopyLogs}
               onClearLogs={() => void handleClearLogs()}
               logViewportRef={logViewportRef}
+              onLogViewportScroll={syncLogViewportMetrics}
             />
           </div>
         ) : (

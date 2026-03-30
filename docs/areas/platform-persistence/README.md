@@ -50,6 +50,8 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - `tauri:dev` ahora arranca via `scripts/tauri-dev.mjs`: limpia `ms-control-center.exe` huerfanos del repo, valida colisiones en `127.0.0.1:1420` y fuerza `RUST_BACKTRACE=1` para que los fallos nativos de desktop queden diagnosticables.
 - Ese wrapper ahora tambien inspecciona el arbol `shell/cmd/npm/tauri/vite` alrededor del listener de `1420` y usa `taskkill /T /F` para cortar sesiones repo-locales stale sin confundirlas con procesos ajenos.
 - `TelemetryCache` ahora se inicializa con RAM y CPU global, y el refresh periodico del dashboard solo actualiza PIDs supervisados; esto evita que el shell desktop haga scans completos de procesos al arrancar en Windows.
+- `RefreshConfig` ahora mantiene cadencias `normal` y `realtime`, un lock explicito alrededor de `build_snapshot()` y un worker coalescido para serializar refreshes urgentes y periodicos del dashboard.
+- Guardar `AppSettings` ya actualiza ambos intervalos (`dashboardRefreshSeconds` y `realtimeRefreshSeconds`) sin depender de mutaciones ad hoc en el ticker.
 
 ## Checklist local
 - [x] `T5.1.1 | US5.1 |` Definir esquema SQLite para `Workspace`, `Service`, `ProcessInstance`, `K6Script` y `K6Run`.
@@ -76,6 +78,7 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - `SC-016`: el launcher de desarrollo desktop ahora endurece el arranque local limpiando procesos huerfanos del repo, diagnosticando conflictos del puerto `1420` y forzando `RUST_BACKTRACE=1`.
 - `SC-017`: la plataforma acoto el uso de `sysinfo` del dashboard para que el proceso desktop no intente cargar toda la tabla de procesos del SO durante el arranque local en Windows.
 - `SC-018`: el launcher ahora tambien resuelve listeners `1420` que quedaron colgados detras de wrappers `shell/cmd/npm/tauri/vite`, cerrando el arbol repo-local completo antes de relanzar.
+- `SC-029`: la plataforma introdujo un coordinador de refresh serializado para el dashboard, eliminando rebuilds concurrentes de snapshot y haciendo que las preferencias de refresh normal/realtime gobiernen la emision real del estado operativo.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

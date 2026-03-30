@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
 
 interface LogMessageProps {
   message: string;
@@ -16,8 +16,12 @@ const MESSAGE_TOKEN_REGEX = /(https?:\/\/[^\s]+)|(\b\d{1,2}\/\d{1,2}\/\d{4},\s+\
 const HTTP_VERBS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "ALL"]);
 const LOG_LEVELS = new Set(["LOG", "INFO", "WARN", "ERROR", "DEBUG", "TRACE", "VERBOSE"]);
 
-export function LogMessage({ message }: LogMessageProps) {
-  const jsonValue = parseJsonMessage(message);
+function LogMessageInner({ message }: LogMessageProps) {
+  const jsonValue = useMemo(() => parseJsonMessage(message), [message]);
+  const tokenizedMessage = useMemo(
+    () => (jsonValue === null ? renderTextTokens(message) : null),
+    [jsonValue, message],
+  );
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (jsonValue !== null) {
@@ -41,8 +45,10 @@ export function LogMessage({ message }: LogMessageProps) {
     );
   }
 
-  return <>{renderTextTokens(message)}</>;
+  return <>{tokenizedMessage}</>;
 }
+
+export const LogMessage = memo(LogMessageInner);
 
 function parseJsonMessage(message: string): JsonValue | null {
   const trimmed = message.trim();

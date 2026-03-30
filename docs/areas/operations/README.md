@@ -39,6 +39,8 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - Si un watcher deja vivo el wrapper de desarrollo pero el microservicio queda bloqueado durante bootstrap o pierde el bind del puerto, operaciones lo marca como `error` sin perder la posibilidad de `Stop` o `Restart` mientras exista PID supervisado.
 - Ese criterio de bloqueo ahora cubre tambien fallas Prisma de inicializacion de base de datos, para que un watcher vivo sin listener real no quede en estado `running`.
 - `Start all` conserva el orden actual del proyecto, pero corre como cola no bloqueante: el canvas y el inspector siguen interactivos y el boton bulk no permite un segundo disparo mientras la cola sigue viva.
+- El runtime ya no reconstruye snapshots inline desde cada accion o linea critica de logs; un worker de refresh coalescido absorbe el estado `starting` y la resincronizacion operativa sin duplicar trabajo pesado.
+- La cadencia rapida del dashboard ahora respeta `realtimeRefreshSeconds` cuando hay servicios supervisados activos o un refresh urgente en cola.
 
 ## Checklist local
 - [x] `T2.1.1 | US2.1 |` Modelar la accion `Run` con feedback inmediato y estado `starting`.
@@ -68,6 +70,7 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - `SC-026`: operaciones saco `Run`/`Restart`/`Stop` del hilo critico de Tauri, reaprovecho un solo snapshot por accion y dejo `Start all` como cola secuencial no bloqueante con bloqueo local del boton bulk.
 - `SC-027`: operaciones ahora detecta como fallo real los bootstraps Prisma que dejan vivo el watcher pero nunca abren listener, manteniendo disponibles `Stop` y `Restart` sobre el wrapper supervisado.
 - `SC-028`: operaciones movio `Port tools` a `spawn_blocking`, evito snapshots redundantes al limpiar nodos supervisados y desacoplo su pending del bloqueo global de la UI.
+- `SC-029`: operaciones movio la resincronizacion del dashboard a un worker coalescido con prioridad `urgent`, dejo `Run`/`Restart` libres de rebuilds redundantes y mantuvo el estado `starting` visible sin volver a cargar el hilo critico.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

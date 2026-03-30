@@ -21,6 +21,6 @@ pub use runtime::{
     run_service, stop_service, RuntimeSupervisor, TelemetryCache,
 };
 // Eventos push
-pub(crate) use events::emit_dashboard_update;
+pub(crate) use events::{request_dashboard_refresh, DashboardRefreshPriority};
 pub use events::{start_background_ticker, RefreshConfig};
 pub(crate) use runtime::{clear_service_launching, mark_service_launching};

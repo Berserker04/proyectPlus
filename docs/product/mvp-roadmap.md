@@ -174,5 +174,6 @@ Definition of done:
 - [x] `SC-026 | operations, ui |` Volver no bloqueantes los arranques manuales y masivos: `Run`/`Restart` se ejecutan fuera del hilo principal de Tauri, el nodo entra en `starting` de inmediato y `Start all` se protege contra dobles disparos.
 - [x] `SC-027 | operations, observability |` Detectar fallas de bootstrap por base de datos cuando el servicio corre bajo watchers tipo `nest start --watch`, de forma que errores como `PrismaClientInitializationError` promuevan el nodo a `error` si no llega a abrir listener TCP.
 - [x] `SC-028 | operations, ui |` Volver no bloqueante `Port tools`: el kill por puerto se despacha con `spawn_blocking`, evita snapshots redundantes al limpiar nodos supervisados y ya no apaga acciones no relacionadas del dashboard.
+- [x] `SC-029 | operations, observability, platform-persistence |` Endurecer el core operativo con un worker de refresh coalescido, uso real de `realtimeRefreshSeconds`, buffer circular de logs en runtime, batching/windowing del inspector y reutilizacion de nodos del canvas para reducir snapshots y renders redundantes.
 - Plantilla de registro:
   - [ ] `SC-001 | area |` Descripcion del cambio detectado, razon, impacto en historias y docs afectados.

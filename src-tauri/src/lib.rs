@@ -110,7 +110,7 @@ fn update_service_order(
 #[tauri::command]
 async fn run_service(app: AppHandle, service_id: String) -> Result<RunServiceResponse, String> {
     storage::mark_service_launching(&app, &service_id);
-    storage::emit_dashboard_update(&app);
+    storage::request_dashboard_refresh(&app, storage::DashboardRefreshPriority::Urgent);
 
     let app_handle = app.clone();
     let run_service_id = service_id.clone();
@@ -118,7 +118,7 @@ async fn run_service(app: AppHandle, service_id: String) -> Result<RunServiceRes
         .await
         .map_err(|error| {
             storage::clear_service_launching(&app, &service_id);
-            storage::emit_dashboard_update(&app);
+            storage::request_dashboard_refresh(&app, storage::DashboardRefreshPriority::Urgent);
             error.to_string()
         })?
 }
@@ -137,7 +137,7 @@ async fn restart_service(
     service_id: String,
 ) -> Result<ServiceActionResponse, String> {
     storage::mark_service_launching(&app, &service_id);
-    storage::emit_dashboard_update(&app);
+    storage::request_dashboard_refresh(&app, storage::DashboardRefreshPriority::Urgent);
 
     let app_handle = app.clone();
     let restart_service_id = service_id.clone();
@@ -147,7 +147,7 @@ async fn restart_service(
     .await
     .map_err(|error| {
         storage::clear_service_launching(&app, &service_id);
-        storage::emit_dashboard_update(&app);
+        storage::request_dashboard_refresh(&app, storage::DashboardRefreshPriority::Urgent);
         error.to_string()
     })?
 }
@@ -231,12 +231,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    storage::initialize_database(&app.handle()).expect("failed to initialize database");
+    storage::initialize_database(app.handle()).expect("failed to initialize database");
     storage::start_background_ticker(app.handle().clone());
 
     app.run(|app_handle, event| {
         if let RunEvent::ExitRequested { .. } = event {
-            let _ = storage::cleanup_runtime(&app_handle);
+            let _ = storage::cleanup_runtime(app_handle);
         }
     });
 }

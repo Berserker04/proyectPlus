@@ -30,6 +30,8 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - La telemetria del dashboard ahora se sirve desde una cache por ciclo de refresh para evitar repetir `PowerShell`, GPU y probes de puerto cuando el snapshot sigue fresco.
 - La cache compartida de `sysinfo` ya no usa `refresh_all()` en cada tick: refresca RAM, CPU global y solo los PIDs que la app supervisa, evitando scans completos de procesos en Windows durante el arranque.
 - Logs e historial del inspector ya se cargan y refrescan solo en la pestana visible, y el autoscroll continuo usa bottom-lock inmediato para no encadenar animaciones.
+- El refresh del dashboard ya no se reconstruye inline desde cada evento local: un worker coalescido serializa `build_snapshot()` y aplica la cadencia rapida real cuando existe runtime activo o un refresh urgente.
+- El runtime ya guarda logs en buffer circular y el inspector los ingiere en batches cortos con windowing simple, evitando copias O(n) y renders completos por cada linea nueva.
 
 - La UI principal ahora renderiza observabilidad dentro de nodos React Flow: el estado visual combina status, CPU y RAM en una sola senal de presion por nodo.
 - Las metricas crudas de CPU y RAM ya no se duplican dentro del nodo; viven solo en el inspector derecho del servicio seleccionado.
@@ -78,6 +80,7 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-024`: el canvas vuelve a escalar a rojo cuando el buffer contiene logs criticos y deja de renderizar el bloque de error dentro del nodo; el detalle textual queda en inspector y toasts para no contaminar el grafo.
 - `SC-025`: se retiro el falso positivo visual de `SC-024`; un nodo vivo ya no entra en rojo por cualquier `ERROR` o `stderr`, y el rojo vuelve a significar fallo bloqueante real del servicio.
 - `SC-027`: los fallos de bootstrap por Prisma o conectividad de base de datos ahora cuentan como bloqueo real bajo watchers tipo `nest start --watch`, evitando que el nodo quede falso-`running` cuando nunca abrio el puerto.
+- `SC-029`: observabilidad ahora coalescea rebuilds globales, usa `realtimeRefreshSeconds` como cadencia viva efectiva y reduce el costo del rail de logs con batching de eventos, memoizacion de lineas y windowing del viewport.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

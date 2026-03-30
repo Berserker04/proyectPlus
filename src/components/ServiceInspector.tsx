@@ -29,7 +29,10 @@ interface ServiceInspectorProps {
   logQuery: string;
   isLogAutoscroll: boolean;
   showLogMeta: boolean;
-  visibleLogEntries: ServiceLogEntry[];
+  renderedLogEntries: ServiceLogEntry[];
+  totalLogEntries: number;
+  logTopSpacerHeight: number;
+  logBottomSpacerHeight: number;
   onFilterChange: (filter: "all" | "stdout" | "stderr") => void;
   onQueryChange: (value: string) => void;
   onToggleAutoscroll: () => void;
@@ -37,6 +40,7 @@ interface ServiceInspectorProps {
   onCopyLogs: () => void;
   onClearLogs: () => void;
   logViewportRef: RefObject<HTMLDivElement | null>;
+  onLogViewportScroll: (viewport?: HTMLDivElement | null) => void;
 }
 
 const tabs: Array<{ id: InspectorTab; label: string }> = [
@@ -216,10 +220,15 @@ export function ServiceInspector(props: ServiceInspectorProps) {
                   </button>
                 </div>
 
-                <div className="inspector-log-viewport log-viewport" ref={props.logViewportRef}>
-                  {props.visibleLogEntries
-                    .filter((entry) => props.logFilter === "all" || entry.stream === props.logFilter)
-                    .map((entry) => (
+                <div
+                  className="inspector-log-viewport log-viewport"
+                  ref={props.logViewportRef}
+                  onScroll={(event) => props.onLogViewportScroll(event.currentTarget)}
+                >
+                  {props.logTopSpacerHeight > 0 ? (
+                    <div style={{ height: props.logTopSpacerHeight }} aria-hidden="true" />
+                  ) : null}
+                  {props.renderedLogEntries.map((entry) => (
                       <div key={entry.sequence} className={`log-entry log-${entry.level}${props.showLogMeta ? "" : " log-entry-compact"}`}>
                         {props.showLogMeta ? (
                           <>
@@ -232,7 +241,10 @@ export function ServiceInspector(props: ServiceInspectorProps) {
                         </div>
                       </div>
                     ))}
-                  {props.visibleLogEntries.length === 0 && (
+                  {props.logBottomSpacerHeight > 0 ? (
+                    <div style={{ height: props.logBottomSpacerHeight }} aria-hidden="true" />
+                  ) : null}
+                  {props.totalLogEntries === 0 && (
                     <div className="log-empty">No log lines for this node yet.</div>
                   )}
                   {props.logSnapshot?.droppedEntries ? (

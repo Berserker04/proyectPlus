@@ -665,3 +665,27 @@ Dependencias:
 
 Trazabilidad:
 - Roadmap: `SC-028`
+
+### [x] SC-029 - Hardening de refresh, logs y canvas del core operativo
+Objetivo: quitar rebuilds globales redundantes y bajar el costo de render/log streaming para que el dashboard siga fluido bajo carga real.
+
+Estado actual:
+- El backend ahora usa un worker unico de refresh con prioridades `normal/urgent`, serializa `build_snapshot()` y aplica `dashboardRefreshSeconds` vs `realtimeRefreshSeconds` segun actividad real del runtime.
+- Los hilos de logs ya no fuerzan snapshots globales inline; solo emiten lineas vivas y solicitan refresh coalescido cuando cambia una senal relevante.
+- El runtime ya conserva logs en buffer circular y el frontend procesa las lineas en lotes cortos con windowing en el inspector.
+- El canvas reutiliza nodos estables por `id` y evita recrear handlers inline por refresh.
+
+Criterios de aceptacion:
+- `Run`, `Restart`, ticker y logs criticos no disparan una rafaga de snapshots redundantes.
+- La preferencia `realtimeRefreshSeconds` gobierna la cadencia rapida cuando hay runtime activo o refresh urgente.
+- Un stream de logs intenso no congela el inspector ni obliga a renderizar todas las lineas retenidas.
+- El canvas no recompone todos los nodos cuando solo cambia una parte del snapshot.
+
+Dependencias:
+- `US2.1`
+- `US3.1`
+- `US3.3`
+- `US5.2`
+
+Trazabilidad:
+- Roadmap: `SC-029`

@@ -15,7 +15,7 @@ use sysinfo::System;
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-use super::events::RefreshConfig;
+use super::events::{build_dashboard_snapshot, update_refresh_intervals};
 use super::runtime::{
     get_live_status, refresh_system_telemetry, resolve_supervised_ports, stop_service,
     RuntimeSupervisor, TelemetryCache,
@@ -353,7 +353,7 @@ pub(crate) fn build_snapshot(app: &AppHandle) -> Result<DashboardSnapshot, Strin
 // ---------------------------------------------------------------------------
 
 pub fn get_dashboard_snapshot(app: &AppHandle) -> Result<DashboardSnapshot, String> {
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
 
 pub fn get_app_settings(app: &AppHandle) -> Result<AppSettings, String> {
@@ -383,10 +383,11 @@ pub fn save_app_settings(app: &AppHandle, settings: AppSettings) -> Result<AppSe
     )
     .map_err(|e| e.to_string())?;
 
-    // Actualizar el intervalo del ticker de fondo en tiempo real
-    if let Ok(mut ms) = app.state::<RefreshConfig>().dashboard_ms.lock() {
-        *ms = (settings.dashboard_refresh_seconds as u64) * 1000;
-    }
+    update_refresh_intervals(
+        app,
+        (settings.dashboard_refresh_seconds as u64) * 1000,
+        (settings.realtime_refresh_seconds as u64) * 1000,
+    );
 
     Ok(settings)
 }
@@ -427,7 +428,7 @@ pub fn create_project(app: &AppHandle, draft: ProjectDraft) -> Result<DashboardS
         params![id, draft.name.trim(), now, now],
     )
     .map_err(|e| e.to_string())?;
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
 
 pub fn update_project(
@@ -442,7 +443,7 @@ pub fn update_project(
         params![draft.name.trim(), now, project_id],
     )
     .map_err(|e| e.to_string())?;
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
 
 pub fn delete_project(app: &AppHandle, project_id: &str) -> Result<DashboardSnapshot, String> {
@@ -480,7 +481,7 @@ pub fn delete_project(app: &AppHandle, project_id: &str) -> Result<DashboardSnap
             [],
         );
     }
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
 
 pub fn select_project(app: &AppHandle, project_id: &str) -> Result<DashboardSnapshot, String> {
@@ -493,7 +494,7 @@ pub fn select_project(app: &AppHandle, project_id: &str) -> Result<DashboardSnap
         params![now, project_id],
     )
     .map_err(|e| e.to_string())?;
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
 
 // ---------------------------------------------------------------------------
@@ -532,7 +533,7 @@ pub fn create_microservice(
         ],
     )
     .map_err(|e| e.to_string())?;
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
 
 pub fn update_microservice(
@@ -557,7 +558,7 @@ pub fn update_microservice(
         ],
     )
     .map_err(|e| e.to_string())?;
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
 
 pub fn delete_microservice(app: &AppHandle, service_id: &str) -> Result<DashboardSnapshot, String> {
@@ -568,7 +569,7 @@ pub fn delete_microservice(app: &AppHandle, service_id: &str) -> Result<Dashboar
         params![service_id],
     )
     .map_err(|e| e.to_string())?;
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
 
 pub fn update_service_order(
@@ -587,5 +588,5 @@ pub fn update_service_order(
         .map_err(|e| e.to_string())?;
     }
     tx.commit().map_err(|e| e.to_string())?;
-    build_snapshot(app)
+    build_dashboard_snapshot(app)
 }
