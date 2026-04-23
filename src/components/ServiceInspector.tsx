@@ -7,15 +7,20 @@ import {
   formatPercent,
   getStatusLabel,
 } from "@/lib/ui/serviceGraph";
+import type { ResolvedTopologyService, TopologySourceMode } from "@/topology/types";
 
-type InspectorTab = "logs" | "events" | "k6" | "alerts";
+type InspectorTab = "overview" | "topology" | "logs" | "events" | "k6" | "alerts";
 
 interface ServiceInspectorProps {
   service: Microservice | null;
+  topologyService: ResolvedTopologyService | null;
+  topologyMode: TopologySourceMode;
+  isTopologyRefreshing: boolean;
   services: Microservice[];
   tab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
   onSelectService: (serviceId: string) => void;
+  onRefreshTopology: () => void;
   onRun: (service: Microservice) => void;
   onStop: (service: Microservice) => void;
   onRestart: (service: Microservice) => void;
@@ -44,6 +49,8 @@ interface ServiceInspectorProps {
 }
 
 const tabs: Array<{ id: InspectorTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "topology", label: "Topology" },
   { id: "logs", label: "Logs" },
   { id: "events", label: "Events" },
   { id: "k6", label: "k6" },
@@ -54,6 +61,9 @@ export function ServiceInspector(props: ServiceInspectorProps) {
   const { service } = props;
   const microservices = props.services.filter((item) => item.kind === "service");
   const workers = props.services.filter((item) => item.kind === "worker");
+  const runtimeSummaryItems = buildRuntimeSummaryItems(props.topologyService);
+  const runtimeItems = buildRuntimeItems(props.topologyService);
+  const runtimeCheckItems = buildRuntimeCheckItems(props.topologyService);
   const isStopDisabled = !service
     || service.status === "stopped"
     || service.status === "external"
@@ -65,7 +75,7 @@ export function ServiceInspector(props: ServiceInspectorProps) {
         <div>
           <p className="inspector-eyebrow">Inspector</p>
           <h2>{service?.name ?? "Select a node"}</h2>
-          <p>{service ? `${service.kind} · ${getStatusLabel(service.status)}` : "Pick a microservice or worker from the graph."}</p>
+          <p>{service ? `${service.kind} / ${getStatusLabel(service.status)}` : "Pick a microservice or worker from the graph."}</p>
         </div>
       </div>
 
@@ -122,63 +132,15 @@ export function ServiceInspector(props: ServiceInspectorProps) {
         </div>
       ) : (
         <>
-          <div className="inspector-summary">
-            <div className="inspector-summary-card">
-              <span>Port</span>
-              <strong>{service.detectedPort ?? "N/A"}</strong>
-            </div>
-            <div className="inspector-summary-card">
-              <span>CPU</span>
-              <strong>{formatPercent(service.cpuPercent)}</strong>
-            </div>
-            <div className="inspector-summary-card">
-              <span>RAM</span>
-              <strong>{formatBytes(service.memoryBytes)}</strong>
-            </div>
-            <div className="inspector-summary-card">
-              <span>PID</span>
-              <strong>{service.pid ?? "N/A"}</strong>
-            </div>
-          </div>
-
-          <div className="inspector-actions">
-            <button type="button" className="btn-primary" onClick={() => props.onRun(service)} disabled={service.status === "running" || service.status === "external"}>
-              Start
-            </button>
-            <button type="button" className="btn-outline" onClick={() => props.onStop(service)} disabled={isStopDisabled}>
-              Stop
-            </button>
-            <button type="button" className="btn-outline" onClick={() => props.onRestart(service)} disabled={service.status === "external"}>
-              Restart
-            </button>
-            <button type="button" className="btn-outline" onClick={() => props.onFolder(service)}>
-              Folder
-            </button>
-            <button type="button" className="btn-outline" onClick={() => props.onTerminal(service)}>
-              Shell
-            </button>
-            <button type="button" className="btn-outline" onClick={() => props.onEdit(service)}>
-              Edit
-            </button>
-            <button type="button" className="btn-outline danger" onClick={() => props.onDelete(service)}>
-              Delete
-            </button>
-          </div>
-
-          {service.issue && (
-            <div className="inspector-issue">
-              <strong>{service.issue.title}</strong>
-              <p>{service.issue.message}</p>
-            </div>
-          )}
-
-          <div className="inspector-tabs">
+          <div className="inspector-tabs" role="tablist" aria-label="Inspector sections">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
+                role="tab"
                 className={`inspector-tab${props.tab === tab.id ? " active" : ""}`}
                 onClick={() => props.onTabChange(tab.id)}
+                aria-selected={props.tab === tab.id}
               >
                 {tab.label}
               </button>
@@ -186,6 +148,203 @@ export function ServiceInspector(props: ServiceInspectorProps) {
           </div>
 
           <div className="inspector-panel">
+            {props.tab === "overview" && (
+              <div className="inspector-scroll-panel inspector-overview">
+                <div className="inspector-summary">
+                  <div className="inspector-summary-card">
+                    <span>Port</span>
+                    <strong>{service.detectedPort ?? "N/A"}</strong>
+                  </div>
+                  <div className="inspector-summary-card">
+                    <span>CPU</span>
+                    <strong>{formatPercent(service.cpuPercent)}</strong>
+                  </div>
+                  <div className="inspector-summary-card">
+                    <span>RAM</span>
+                    <strong>{formatBytes(service.memoryBytes)}</strong>
+                  </div>
+                  <div className="inspector-summary-card">
+                    <span>PID</span>
+                    <strong>{service.pid ?? "N/A"}</strong>
+                  </div>
+                </div>
+
+                <div className="inspector-actions">
+                  <button type="button" className="btn-primary" onClick={() => props.onRun(service)} disabled={service.status === "running" || service.status === "external"}>
+                    Start
+                  </button>
+                  <button type="button" className="btn-outline" onClick={() => props.onStop(service)} disabled={isStopDisabled}>
+                    Stop
+                  </button>
+                  <button type="button" className="btn-outline" onClick={() => props.onRestart(service)} disabled={service.status === "external"}>
+                    Restart
+                  </button>
+                  <button type="button" className="btn-outline" onClick={() => props.onFolder(service)}>
+                    Folder
+                  </button>
+                  <button type="button" className="btn-outline" onClick={() => props.onTerminal(service)}>
+                    Shell
+                  </button>
+                  <button type="button" className="btn-outline" onClick={() => props.onEdit(service)}>
+                    Edit
+                  </button>
+                  <button type="button" className="btn-outline danger" onClick={() => props.onDelete(service)}>
+                    Delete
+                  </button>
+                </div>
+
+                <div className="inspector-overview-section">
+                  <strong>Service details</strong>
+                  <dl className="inspector-overview-details">
+                    <div className="inspector-overview-detail">
+                      <dt>Kind</dt>
+                      <dd>{service.kind}</dd>
+                    </div>
+                    <div className="inspector-overview-detail">
+                      <dt>Status</dt>
+                      <dd>{getStatusLabel(service.status)}</dd>
+                    </div>
+                    <div className="inspector-overview-detail inspector-overview-detail-wide">
+                      <dt>Working directory</dt>
+                      <dd>{service.workingDirectory}</dd>
+                    </div>
+                    <div className="inspector-overview-detail inspector-overview-detail-wide">
+                      <dt>Start command</dt>
+                      <dd>{service.startCommand}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+            )}
+
+            {props.tab === "topology" && (
+              <div className="inspector-scroll-panel">
+                <div className="inspector-topology">
+                  <div className="inspector-topology-header">
+                    <div>
+                      <p className="inspector-topology-eyebrow">Topology</p>
+                      <h3>
+                        {props.topologyService?.sourceOfTruth === "manifest"
+                          ? `${props.topologyService.loadSource ?? "manifest"} source`
+                          : "legacy/manual"}
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={props.onRefreshTopology}
+                      disabled={props.isTopologyRefreshing}
+                    >
+                      {props.isTopologyRefreshing ? "Refreshing..." : "Refresh"}
+                    </button>
+                  </div>
+
+                  <div className="inspector-topology-summary">
+                    <div className="inspector-topology-pill">
+                      <span>Mode</span>
+                      <strong>{props.topologyMode}</strong>
+                    </div>
+                    <div className="inspector-topology-pill">
+                      <span>Service</span>
+                      <strong>{props.topologyService?.serviceName ?? service.name}</strong>
+                    </div>
+                    <div className="inspector-topology-pill">
+                      <span>Kind</span>
+                      <strong>{props.topologyService?.manifest?.kind ?? "legacy/manual"}</strong>
+                    </div>
+                    <div className="inspector-topology-pill">
+                      <span>Last refresh</span>
+                      <strong>{props.topologyService?.lastAttemptAt ? formatLogMetaTimestamp(props.topologyService.lastAttemptAt) : "Never"}</strong>
+                    </div>
+                    <div className="inspector-topology-pill">
+                      <span>Status</span>
+                      <strong>{props.topologyService?.stale ? "Topology stale" : "Fresh"}</strong>
+                    </div>
+                  </div>
+
+                  {props.topologyService?.error ? (
+                    <div className="inspector-topology-warning">
+                      <strong>Manifest warning</strong>
+                      <p>{props.topologyService.error}</p>
+                    </div>
+                  ) : null}
+
+                  {props.topologyService?.warnings.length ? (
+                    <div className="inspector-topology-warning">
+                      <strong>Warnings</strong>
+                      <p>{props.topologyService.warnings.join(" | ")}</p>
+                    </div>
+                  ) : null}
+
+                  {props.topologyService?.manifest ? (
+                    <>
+                      <TopologyList
+                        title="Health endpoints"
+                        items={[
+                          props.topologyService.health?.summary ? `summary: ${props.topologyService.health.summary}` : null,
+                          props.topologyService.health?.live ? `live: ${props.topologyService.health.live}` : null,
+                          props.topologyService.health?.ready ? `ready: ${props.topologyService.health.ready}` : null,
+                        ]}
+                        emptyLabel="No health endpoints declared."
+                      />
+
+                      <TopologyList
+                        title="HTTP dependencies"
+                        items={props.topologyService.httpDependencies.map((dependency) =>
+                          `${dependency.direction} -> ${dependency.service}${dependency.required ? " (required)" : " (optional)"}`,
+                        )}
+                        emptyLabel="No HTTP dependencies declared."
+                      />
+
+                      <TopologyList
+                        title="Rabbit publish"
+                        items={props.topologyService.rabbitPublishes.map((dependency) =>
+                          `${dependency.exchange} :: ${dependency.routingKeys.join(", ") || "all keys"}`,
+                        )}
+                        emptyLabel="No RabbitMQ publish bindings."
+                      />
+
+                      <TopologyList
+                        title="Rabbit consume"
+                        items={props.topologyService.rabbitConsumes.map((dependency) =>
+                          `${dependency.exchange} -> ${dependency.queue} :: ${dependency.routingKeys.join(", ") || "all keys"}`,
+                        )}
+                        emptyLabel="No RabbitMQ consumers."
+                      />
+
+                      <TopologyList
+                        title="Runtime summary"
+                        items={runtimeSummaryItems}
+                        emptyLabel="No runtime summary reported."
+                      />
+
+                      <TopologyList
+                        title="Sub-runtimes"
+                        items={runtimeItems}
+                        emptyLabel="No composed runtimes declared."
+                      />
+
+                      <TopologyList
+                        title="Runtime checks"
+                        items={runtimeCheckItems}
+                        emptyLabel="No runtime checks reported."
+                      />
+
+                      <details className="inspector-topology-raw">
+                        <summary>Raw manifest</summary>
+                        <pre>{props.topologyService.rawManifest}</pre>
+                      </details>
+                    </>
+                  ) : (
+                    <div className="inspector-topology-warning">
+                      <strong>Legacy/manual node</strong>
+                      <p>This service does not expose `/internal/topology` and has no local `topology.manifest.json` fallback yet.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {props.tab === "logs" && (
               <div className="inspector-logs">
                 <div className="inspector-log-toolbar">
@@ -229,18 +388,18 @@ export function ServiceInspector(props: ServiceInspectorProps) {
                     <div style={{ height: props.logTopSpacerHeight }} aria-hidden="true" />
                   ) : null}
                   {props.renderedLogEntries.map((entry) => (
-                      <div key={entry.sequence} className={`log-entry log-${entry.level}${props.showLogMeta ? "" : " log-entry-compact"}`}>
-                        {props.showLogMeta ? (
-                          <>
-                            <span className="log-ts">{formatLogMetaTimestamp(entry.timestamp)}</span>
-                            <span className={`log-stream log-stream-${entry.stream}`}>{entry.stream}</span>
-                          </>
-                        ) : null}
-                        <div className="log-msg">
-                          <LogMessage message={entry.message} />
-                        </div>
+                    <div key={entry.sequence} className={`log-entry log-${entry.level}${props.showLogMeta ? "" : " log-entry-compact"}`}>
+                      {props.showLogMeta ? (
+                        <>
+                          <span className="log-ts">{formatLogMetaTimestamp(entry.timestamp)}</span>
+                          <span className={`log-stream log-stream-${entry.stream}`}>{entry.stream}</span>
+                        </>
+                      ) : null}
+                      <div className="log-msg">
+                        <LogMessage message={entry.message} />
                       </div>
-                    ))}
+                    </div>
+                  ))}
                   {props.logBottomSpacerHeight > 0 ? (
                     <div style={{ height: props.logBottomSpacerHeight }} aria-hidden="true" />
                   ) : null}
@@ -271,10 +430,20 @@ export function ServiceInspector(props: ServiceInspectorProps) {
             )}
 
             {props.tab === "alerts" && (
-              <PlaceholderPanel
-                title="Alerts pending"
-                body="Alert routing will land here once healthchecks and thresholds exist in the backend."
-              />
+              <div className="inspector-scroll-panel">
+                {service.issue ? (
+                  <div className="inspector-issue">
+                    <strong>{service.issue.title}</strong>
+                    <p>{service.issue.message}</p>
+                    {service.issue.detail ? <p>{service.issue.detail}</p> : null}
+                  </div>
+                ) : (
+                  <PlaceholderPanel
+                    title="No active alerts"
+                    body="Runtime issues and future threshold alerts will land here when they exist."
+                  />
+                )}
+              </div>
             )}
           </div>
         </>
@@ -290,4 +459,53 @@ function PlaceholderPanel(props: { title: string; body: string }) {
       <p>{props.body}</p>
     </div>
   );
+}
+
+function TopologyList(props: { title: string; items: Array<string | null>; emptyLabel: string }) {
+  const items = props.items.filter((item): item is string => Boolean(item));
+
+  return (
+    <div className="inspector-topology-section">
+      <strong>{props.title}</strong>
+      {items.length > 0 ? (
+        <ul className="inspector-topology-list">
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>{props.emptyLabel}</p>
+      )}
+    </div>
+  );
+}
+
+function buildRuntimeSummaryItems(topologyService: ResolvedTopologyService | null): string[] {
+  if (!topologyService?.runtime) return [];
+
+  return [
+    `status: ${topologyService.runtime.status}`,
+    `ready: ${topologyService.runtime.ready ? "yes" : "no"}`,
+  ];
+}
+
+function buildRuntimeItems(topologyService: ResolvedTopologyService | null): string[] {
+  if (!topologyService?.runtimes) return [];
+
+  return Object.entries(topologyService.runtimes).flatMap(([runtimeKey, runtime]) =>
+    runtime
+      ? [`${runtimeKey}: ${runtime.status} (${runtime.ready ? "ready" : "not ready"})`]
+      : [],
+  );
+}
+
+function buildRuntimeCheckItems(topologyService: ResolvedTopologyService | null): string[] {
+  if (!topologyService) return [];
+
+  const nestedChecks = Object.entries(topologyService.runtimes ?? {}).flatMap(([runtimeKey, runtime]) =>
+    (runtime?.checks ?? []).map((check) => `${runtimeKey}.${check.name}: ${check.status}`),
+  );
+
+  if (nestedChecks.length > 0) return nestedChecks;
+  return (topologyService.runtime?.checks ?? []).map((check) => `${check.name}: ${check.status}`);
 }

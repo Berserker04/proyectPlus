@@ -52,6 +52,9 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - `TelemetryCache` ahora se inicializa con RAM y CPU global, y el refresh periodico del dashboard solo actualiza PIDs supervisados; esto evita que el shell desktop haga scans completos de procesos al arrancar en Windows.
 - `RefreshConfig` ahora mantiene cadencias `normal` y `realtime`, un lock explicito alrededor de `build_snapshot()` y un worker coalescido para serializar refreshes urgentes y periodicos del dashboard.
 - Guardar `AppSettings` ya actualiza ambos intervalos (`dashboardRefreshSeconds` y `realtimeRefreshSeconds`) sin depender de mutaciones ad hoc en el ticker.
+- La plataforma ahora expone `read_service_topology_manifest`, un comando Tauri acotado al `working_directory` del servicio para leer `topology.manifest.json` como fallback sin abrir lectura arbitraria del filesystem.
+- El build frontend ahora expone el feature flag `TOPOLOGY_SOURCE=manual|manifest|hybrid` hacia `import.meta.env`, con `hybrid` como default de transicion.
+- La capa frontend de topologia tambien conoce los puertos canonicos de StylePlus (`3000-3014`) como port hints de bootstrap y acepta manifests `hybrid` con runtimes compuestos `api/worker`.
 
 ## Checklist local
 - [x] `T5.1.1 | US5.1 |` Definir esquema SQLite para `Workspace`, `Service`, `ProcessInstance`, `K6Script` y `K6Run`.
@@ -79,6 +82,8 @@ Esta area cubre persistencia local, settings, seguridad operativa, allowlists y 
 - `SC-017`: la plataforma acoto el uso de `sysinfo` del dashboard para que el proceso desktop no intente cargar toda la tabla de procesos del SO durante el arranque local en Windows.
 - `SC-018`: el launcher ahora tambien resuelve listeners `1420` que quedaron colgados detras de wrappers `shell/cmd/npm/tauri/vite`, cerrando el arbol repo-local completo antes de relanzar.
 - `SC-029`: la plataforma introdujo un coordinador de refresh serializado para el dashboard, eliminando rebuilds concurrentes de snapshot y haciendo que las preferencias de refresh normal/realtime gobiernen la emision real del estado operativo.
+- `SC-030`: la plataforma suma el comando Tauri para fallback de manifest local, actualiza capabilities de desktop y deja disponible el feature flag de fuente de topologia para alternar `manual`, `manifest` y `hybrid`.
+- `SC-030`: la plataforma deja preparado el contrato para bounded contexts StylePlus que publican un unico `/internal/topology` con resumen compuesto de `api` y `worker`.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

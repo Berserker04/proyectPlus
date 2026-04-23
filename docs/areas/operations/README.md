@@ -35,12 +35,15 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - Las acciones runtime embebidas ahora reafirman el foco del inspector antes de ejecutar `Start`, `Stop` o `Restart`, evitando clicks perdidos y arrastres accidentales sobre el nodo.
 - El overlay de conexion ahora cubre toda la tarjeta del nodo, pero el grip de drag y los botones runtime quedan aislados por encima para que conectar, mover y operar no compitan entre si.
 - La conmutacion entre nodos desde el inspector ya se resuelve con dos selects por tipo (`microservices` y `workers`), manteniendo las acciones runtime ligadas al foco actual sin llenar la rail de botones.
+- Las acciones runtime y utilitarias del inspector ya no comparten espacio con topology y logs en la misma columna visible; ahora viven en la tab `Overview`, lo que reduce ruido y mantiene el rail operativo mas legible.
 - Cada `Start` o `Restart` sobre el servicio enfocado limpia el buffer visible de logs antes de la nueva corrida, evitando que el inspector mezcle la salida anterior con la actual.
 - Si un watcher deja vivo el wrapper de desarrollo pero el microservicio queda bloqueado durante bootstrap o pierde el bind del puerto, operaciones lo marca como `error` sin perder la posibilidad de `Stop` o `Restart` mientras exista PID supervisado.
 - Ese criterio de bloqueo ahora cubre tambien fallas Prisma de inicializacion de base de datos, para que un watcher vivo sin listener real no quede en estado `running`.
 - `Start all` conserva el orden actual del proyecto, pero corre como cola no bloqueante: el canvas y el inspector siguen interactivos y el boton bulk no permite un segundo disparo mientras la cola sigue viva.
 - El runtime ya no reconstruye snapshots inline desde cada accion o linea critica de logs; un worker de refresh coalescido absorbe el estado `starting` y la resincronizacion operativa sin duplicar trabajo pesado.
 - La cadencia rapida del dashboard ahora respeta `realtimeRefreshSeconds` cuando hay servicios supervisados activos o un refresh urgente en cola.
+- Las acciones `Run`, `Stop`, `Restart` y `Port tools` ya no disparan resincronizacion de topology manifests; el canvas derivado se actualiza solo cuando el usuario ejecuta `Refresh topology`.
+- Para bounded contexts StylePlus `hybrid`, operaciones asume un solo `/internal/topology` expuesto por la API y deja que ese endpoint reporte tambien el estado del worker, sin intentar descubrir un segundo endpoint por separado.
 
 ## Checklist local
 - [x] `T2.1.1 | US2.1 |` Modelar la accion `Run` con feedback inmediato y estado `starting`.
@@ -71,6 +74,10 @@ Esta area cubre el ciclo de vida operativo de los servicios: iniciar, detener, r
 - `SC-027`: operaciones ahora detecta como fallo real los bootstraps Prisma que dejan vivo el watcher pero nunca abren listener, manteniendo disponibles `Stop` y `Restart` sobre el wrapper supervisado.
 - `SC-028`: operaciones movio `Port tools` a `spawn_blocking`, evito snapshots redundantes al limpiar nodos supervisados y desacoplo su pending del bloqueo global de la UI.
 - `SC-029`: operaciones movio la resincronizacion del dashboard a un worker coalescido con prioridad `urgent`, dejo `Run`/`Restart` libres de rebuilds redundantes y mantuvo el estado `starting` visible sin volver a cargar el hilo critico.
+- `SC-030`: operaciones conecta el runtime con la nueva capa de topology por manifests, dejando la recalibracion de edges y readiness disponible cuando el usuario resincroniza topology desde el canvas.
+- `SC-030`: operaciones ya respeta el contrato `hybrid` de StylePlus y los port hints canonicos para resincronizar topologia aunque el puerto real aun no haya sido detectado por supervision local.
+- `SC-031`: operaciones mueve `Start`, `Stop`, `Restart`, carpeta, shell y edicion a un `Overview` tab dedicado dentro del inspector, separando el diagnostico operativo de `Topology`, `Logs` y `Alerts`.
+- `SC-032`: operaciones deja de disparar refresh de topology desde acciones runtime o `Port tools`; la resincronizacion derivada queda bajo control manual desde el boton `Refresh topology`.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

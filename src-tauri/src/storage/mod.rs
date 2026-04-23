@@ -9,7 +9,10 @@ mod metrics;
 mod runtime;
 
 // Re-exports — superficie pública idéntica a la anterior
-pub use actions::{open_service_folder, open_service_terminal};
+pub use actions::{
+    fetch_service_topology_endpoint, open_service_folder, open_service_terminal,
+    read_service_topology_manifest,
+};
 pub use db::{
     create_microservice, create_project, delete_microservice, delete_project, get_app_settings,
     get_dashboard_snapshot, get_project_topology, initialize_database, save_app_settings,

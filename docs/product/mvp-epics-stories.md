@@ -689,3 +689,45 @@ Dependencias:
 
 Trazabilidad:
 - Roadmap: `SC-029`
+
+### [x] SC-030 - Topologia derivada por manifests de microservicios
+Objetivo: dejar de dibujar dependencias a mano en el canvas y pasar a un modelo derivado desde `/internal/topology` con fallback local mientras termina la migracion de StylePlus.
+
+Estado actual:
+- ProjectsPlus ya carga manifests desde `GET /internal/topology` por servicio cuando el runtime expone puerto local.
+- Cuando el puerto aun no fue detectado, la carga intenta primero `detectedPort/expectedPort` y luego los puertos canonicos de StylePlus (`3000-3014`) como port hints de bootstrap.
+- Si el endpoint aun no existe, la app cae a `workingDirectory/topology.manifest.json` mediante un comando Tauri acotado al directorio del servicio.
+- Un topology store en memoria recompone nodos/edges derivados, resuelve HTTP y RabbitMQ en vista simple, recalcula estados `declared/active` y conserva manual edges solo para servicios legacy bajo `TOPOLOGY_SOURCE=hybrid`.
+- El parser acepta manifests `api`, `worker` y `hybrid`, incluyendo runtimes compuestos `api/worker` sin exigir un segundo endpoint para el worker.
+- El inspector ahora expone manifest raw, health endpoints, dependencias HTTP, publish/consume RabbitMQ, runtime summary, sub-runtimes, runtime checks y alertas de `topology stale`.
+
+Criterios de aceptacion:
+- El canvas crea y reconcilia edges automaticamente para servicios migrados sin depender de lineas manuales.
+- El modo `hybrid` mantiene compatibilidad temporal con nodos legacy/manual mientras los manifests se incorporan gradualmente.
+- Un fallo o manifest invalido de un servicio no rompe el canvas completo y conserva el ultimo manifest valido conocido.
+
+Dependencias:
+- `SC-008`
+- `SC-029`
+
+Trazabilidad:
+- Roadmap: `SC-030`
+
+### [x] SC-032 - Refresh manual de topology manifests
+Objetivo: evitar refreshes automaticos de topology que recompongan manifests y edges sin intencion explicita del usuario, dejando la resincronizacion bajo control manual desde el canvas.
+
+Estado actual:
+- La app mantiene el topology store en memoria y recompone nodos/edges legacy o manuales con cada cambio de contexto del proyecto.
+- La carga de manifests `/internal/topology` o `topology.manifest.json` ya no corre al montar, ni en polling, ni tras `Run`, `Stop`, `Restart` o `Kill port`.
+- El boton `Refresh topology` en la vista del canvas es ahora el unico disparador para volver a resolver manifests, dependencias HTTP/RabbitMQ y estados derivados asociados.
+
+Criterios de aceptacion:
+- Abrir un proyecto o cambiar el estado runtime de un servicio no dispara automaticamente una recarga de topology manifests.
+- El usuario puede resincronizar topology bajo demanda desde el canvas sin perder nodos, layout ni edges manuales legacy.
+- La documentacion de discovery, operations y observability refleja que topology se refresca manualmente.
+
+Dependencias:
+- `SC-030`
+
+Trazabilidad:
+- Roadmap: `SC-032`

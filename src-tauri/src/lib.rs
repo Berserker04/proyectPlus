@@ -6,6 +6,7 @@ use tauri::{AppHandle, RunEvent};
 use models::{
     AppSettings, DashboardSnapshot, MicroserviceDraft, PortKillResponse, ProjectDraft,
     ProjectTopology, RunServiceResponse, ServiceActionResponse, ServiceLogSnapshot,
+    TopologyEndpointResponse,
 };
 
 // ---------------------------------------------------------------------------
@@ -181,6 +182,24 @@ fn open_service_terminal(app: AppHandle, service_id: String) -> Result<(), Strin
 }
 
 #[tauri::command]
+fn read_service_topology_manifest(
+    app: AppHandle,
+    service_id: String,
+) -> Result<Option<String>, String> {
+    storage::read_service_topology_manifest(&app, &service_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn fetch_service_topology_endpoint(
+    url: String,
+    timeout_ms: Option<u64>,
+) -> Result<TopologyEndpointResponse, String> {
+    storage::fetch_service_topology_endpoint(&url, timeout_ms)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn kill_process_on_port(app: AppHandle, port: u16) -> Result<PortKillResponse, String> {
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || storage::kill_process_on_port(&app_handle, port))
@@ -225,6 +244,8 @@ pub fn run() {
             clear_service_logs,
             open_service_folder,
             open_service_terminal,
+            read_service_topology_manifest,
+            fetch_service_topology_endpoint,
             kill_process_on_port,
             select_directory,
         ])

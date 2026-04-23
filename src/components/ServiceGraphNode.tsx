@@ -10,6 +10,10 @@ import {
 export interface ServiceGraphNodeData {
   service: Microservice;
   telemetry: NodeTelemetryViewModel;
+  label: string;
+  subtitle: string | null;
+  topologySourceLabel: string;
+  isTopologyStale: boolean;
   onFocus: (serviceId: string) => void;
   onRun: (service: Microservice) => void;
   onStop: (service: Microservice) => void;
@@ -42,8 +46,13 @@ function ServiceGraphNodeInner({ data, selected }: NodeProps<ServiceGraphNodeDat
       <div className="flow-node-shell">
         <div className="flow-node-header">
           <div className="flow-node-heading">
-            <span className={`flow-kind-chip flow-kind-${service.kind}`}>{service.kind}</span>
-            <h3>{service.name}</h3>
+            <div className="flow-node-badges">
+              <span className={`flow-kind-chip flow-kind-${service.kind}`}>{service.kind}</span>
+              <span className="flow-topology-chip">{data.topologySourceLabel}</span>
+              {data.isTopologyStale ? <span className="flow-topology-chip flow-topology-chip-stale">stale</span> : null}
+            </div>
+            <h3>{data.label}</h3>
+            {data.subtitle ? <p className="flow-node-subtitle">{data.subtitle}</p> : null}
           </div>
           <div className="flow-node-header-tools">
             <div className="flow-node-state">

@@ -46,6 +46,11 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - La captura de logs ahora sanea secuencias ANSI/CSI/OSC, retornos de carro inline y otros controles de terminal antes de guardar el buffer y emitir eventos en vivo, para que la UI muestre texto limpio equivalente a una consola real.
 - La UI de logs ahora renderiza el prefijo en hora local del equipo, puede ocultar o mostrar manualmente los metadatos de cada linea y colorea entidades utiles del mensaje como contexto Nest, verbos HTTP, rutas, duraciones y JSON inline.
 - Las lineas que contienen JSON valido ahora pueden expandirse o colapsarse individualmente: por defecto quedan compactas, pero al abrirlas muestran una vista pretty multiline para inspeccionar payloads sin salir del inspector.
+- Observabilidad mantiene la topologia derivada desacoplada del refresh de CPU/RAM, pero la resincronizacion de manifests ya no corre sola: solo ocurre cuando el usuario pulsa `Refresh topology`.
+- Los edges del canvas ya no usan tonos genericos; calculan `declared` vs `active` segun readiness real de source/target y del runtime relevante (`api` para HTTP, `worker/api` compuesto para RabbitMQ), y dejan reservado `live/error` para fases futuras de trafico y fallos observados.
+- El inspector derecho ahora muestra el manifest raw, health endpoints, dependencias HTTP, publish/consume RabbitMQ, runtime summary, sub-runtimes, runtime checks y bandera `topology stale` por servicio.
+- El inspector derecho ya no apila resumen, topology y logs en una sola columna continua: ahora separa `Overview`, `Topology`, `Logs`, `Alerts`, `Events` y `k6` en tabs reales, con un unico viewport scrollable por seccion.
+- Las alertas runtime actuales del servicio dejaron de competir con los logs; cuando existen viven en la tab `Alerts`, mientras `Logs` conserva un viewport propio y `Overview` concentra acciones y metadata base.
 
 ## Checklist local
 - [x] `T3.1.1 | US3.1 |` Recolectar CPU y RAM por proceso y totales del sistema.
@@ -81,6 +86,10 @@ Esta area cubre metricas por servicio, puertos, consumo de recursos, soporte GPU
 - `SC-025`: se retiro el falso positivo visual de `SC-024`; un nodo vivo ya no entra en rojo por cualquier `ERROR` o `stderr`, y el rojo vuelve a significar fallo bloqueante real del servicio.
 - `SC-027`: los fallos de bootstrap por Prisma o conectividad de base de datos ahora cuentan como bloqueo real bajo watchers tipo `nest start --watch`, evitando que el nodo quede falso-`running` cuando nunca abrio el puerto.
 - `SC-029`: observabilidad ahora coalescea rebuilds globales, usa `realtimeRefreshSeconds` como cadencia viva efectiva y reduce el costo del rail de logs con batching de eventos, memoizacion de lineas y windowing del viewport.
+- `SC-030`: observabilidad agrega un topology store central para manifests `/internal/topology`, estados visuales declarativos en edges y visibilidad de dependencias/health/runtime directamente en el inspector.
+- `SC-030`: observabilidad endurece ese contrato con port hints StylePlus y soporte de manifests `hybrid` para leer el estado compuesto `api/worker` desde un unico endpoint.
+- `SC-031`: observabilidad segmenta el rail derecho en tabs reales para evitar saturacion visual; `Overview` concentra runtime basico, `Topology` encapsula manifests y `Alerts` deja de pelear espacio con `Logs`.
+- `SC-032`: observabilidad retira el polling y los refresh implicitos de topology; el usuario decide cuando resincronizar manifests desde el canvas.
 
 ## Enlaces
 - PRD: [`../../prd/mvp-ms-control-center.md`](../../prd/mvp-ms-control-center.md)

@@ -4,12 +4,12 @@ import {
   useInternalNode,
   type EdgeProps,
 } from "@xyflow/react";
-import type { ProjectTopologyEdge } from "@/lib/domain/models";
 import { getFloatingEdgeGeometry } from "@/lib/ui/flowGeometry";
-import { formatEdgeTelemetry, getEdgeToneColor } from "@/lib/ui/serviceGraph";
+import { getTopologyEdgeStyle } from "@/topology/topology-edge-style";
+import type { ResolvedTopologyEdge } from "@/topology/types";
 
 export interface ServiceFlowEdgeData {
-  edge: ProjectTopologyEdge;
+  edge: ResolvedTopologyEdge;
 }
 
 export function ServiceFlowEdge({
@@ -28,9 +28,8 @@ export function ServiceFlowEdge({
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
   const geometry = sourceNode && targetNode ? getFloatingEdgeGeometry(sourceNode, targetNode) : null;
-
-  const telemetry = formatEdgeTelemetry(data?.edge.telemetry);
-  const strokeColor = getEdgeToneColor(telemetry.tone);
+  const style = getTopologyEdgeStyle(data?.edge.visualState ?? "declared");
+  const strokeColor = style.stroke;
   const markerId = `service-flow-edge-arrow-${id}`;
   const [path] = getBezierPath({
     sourceX: geometry?.sourceX ?? sourceX,
@@ -63,7 +62,8 @@ export function ServiceFlowEdge({
         path={path}
         markerEnd={`url(#${markerId})`}
         interactionWidth={32}
-        className={`service-flow-edge service-flow-edge-${telemetry.tone}${selected ? " is-selected" : ""}`}
+        className={`service-flow-edge ${style.className}${selected ? " is-selected" : ""}`}
+        style={style.dasharray ? { strokeDasharray: style.dasharray } : undefined}
       />
     </>
   );

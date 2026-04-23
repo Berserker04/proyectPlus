@@ -3,6 +3,11 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
+  define: {
+    "import.meta.env.TOPOLOGY_SOURCE": JSON.stringify(
+      process.env.TOPOLOGY_SOURCE ?? process.env.VITE_TOPOLOGY_SOURCE ?? "hybrid",
+    ),
+  },
   plugins: [react()],
   resolve: {
     alias: {

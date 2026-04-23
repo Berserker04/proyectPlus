@@ -39,6 +39,8 @@ import {
   openDirectoryDialog,
   openServiceFolder,
   openServiceTerminal,
+  fetchServiceTopologyEndpoint,
+  readServiceTopologyManifest,
   restartService,
   runService,
   saveAppSettings,
@@ -61,9 +63,17 @@ import type { ServiceGraphNodeData } from "@/components/ServiceGraphNode";
 import { Modal } from "@/components/Modal";
 import { formatLogMetaTimestamp } from "@/lib/ui/logs";
 import { buildPressureTelemetry } from "@/lib/ui/serviceGraph";
+import { createTopologyLoader } from "@/topology/topology-loader";
+import { createTopologyPoller, type TopologyPoller } from "@/topology/topology-poller";
+import { createTopologyStore } from "@/topology/topology-store";
+import {
+  getTopologySourceMode,
+  type ResolvedTopologyService,
+  type TopologyGraphSnapshot,
+} from "@/topology/types";
 
 type AppView = "graph" | "settings";
-type InspectorTab = "logs" | "events" | "k6" | "alerts";
+type InspectorTab = "overview" | "topology" | "logs" | "events" | "k6" | "alerts";
 
 const DEFAULT_NODE_WIDTH = 330;
 const DEFAULT_NODE_HEIGHT = 184;
@@ -76,6 +86,7 @@ const MAX_LIVE_LOG_ENTRIES = 2_000;
 const LOG_BATCH_DELAY_MS = 32;
 const LOG_ROW_ESTIMATE = 32;
 const LOG_WINDOW_OVERSCAN = 40;
+const TOPOLOGY_SOURCE_MODE = getTopologySourceMode();
 
 function isEdgeDeleteKey(event: KeyboardEvent): boolean {
   return event.key === "Delete" || event.key === "Del" || event.code === "Delete";
@@ -166,6 +177,7 @@ function areServicesEqual(left: Microservice, right: Microservice) {
 
 function buildGraphNode(args: {
   service: Microservice;
+  topologyService: ResolvedTopologyService | null;
   layout: ServiceNodeLayout;
   selected: boolean;
   previous?: Node<ServiceGraphNodeData>;
@@ -174,7 +186,13 @@ function buildGraphNode(args: {
   onStop: (service: Microservice) => void;
   onRestart: (service: Microservice) => void;
 }): Node<ServiceGraphNodeData> {
-  const { service, layout, selected, previous, onFocus, onRun, onStop, onRestart } = args;
+  const { service, topologyService, layout, selected, previous, onFocus, onRun, onStop, onRestart } = args;
+  const label = topologyService?.displayName ?? service.name;
+  const subtitleParts = [
+    topologyService?.manifest && topologyService.serviceName !== label ? topologyService.serviceName : null,
+    topologyService?.manifest?.kind === "hybrid" ? "hybrid" : null,
+  ].filter((part): part is string => Boolean(part));
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(" / ") : null;
 
   return {
     ...previous,
@@ -185,6 +203,12 @@ function buildGraphNode(args: {
     data: {
       service,
       telemetry: buildPressureTelemetry(service),
+      label,
+      subtitle,
+      topologySourceLabel: topologyService?.sourceOfTruth === "manifest"
+        ? `${topologyService.loadSource ?? "manifest"}`
+        : "legacy",
+      isTopologyStale: Boolean(topologyService?.stale),
       onFocus,
       onRun,
       onStop,
@@ -205,11 +229,21 @@ export default function App() {
   const snapshotRef = useRef<DashboardSnapshot>(emptySnapshot());
   const pendingLogEntriesRef = useRef<ServiceLogEntry[]>([]);
   const logFlushTimerRef = useRef<number | null>(null);
+  const topologyStoreRef = useRef(createTopologyStore({ mode: TOPOLOGY_SOURCE_MODE }));
+  const topologyPollerRef = useRef<TopologyPoller | null>(null);
+  const topologyLoaderRef = useRef(createTopologyLoader({
+    loadHttpImpl: isDesktop ? fetchServiceTopologyEndpoint : undefined,
+    readLocalManifest: readServiceTopologyManifest,
+  }));
 
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>(emptySnapshot);
   const [topology, setTopology] = useState<ProjectTopology | null>(null);
+  const [topologyGraph, setTopologyGraph] = useState<TopologyGraphSnapshot>(() =>
+    topologyStoreRef.current.getSnapshot().graph
+  );
   const [flowNodes, setFlowNodes] = useState<Array<Node<ServiceGraphNodeData>>>([]);
   const [isTopologyDirty, setIsTopologyDirty] = useState(false);
+  const [isTopologyRefreshing, setIsTopologyRefreshing] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     dashboardRefreshSeconds: 2,
     realtimeRefreshSeconds: 1,
@@ -222,7 +256,7 @@ export default function App() {
   const [view, setView] = useState<AppView>("graph");
   const [focusedServiceId, setFocusedServiceId] = useState<string | null>(null);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("logs");
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("overview");
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     const stored = window.localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY);
     const parsed = stored ? Number.parseInt(stored, 10) : Number.NaN;
@@ -283,6 +317,11 @@ export default function App() {
     [focusedServiceId, snapshot.services],
   );
 
+  const focusedTopologyService = useMemo<ResolvedTopologyService | null>(
+    () => (focusedServiceId ? topologyGraph.servicesById[focusedServiceId] ?? null : null),
+    [focusedServiceId, topologyGraph.servicesById],
+  );
+
   const activeProjectStats = useMemo(() => {
     let running = 0;
     let errors = 0;
@@ -291,12 +330,6 @@ export default function App() {
       if (service.status === "error") errors += 1;
     }
     return { total: snapshot.services.length, running, errors };
-  }, [snapshot.services]);
-
-  const serviceNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const service of snapshot.services) map.set(service.id, service.name);
-    return map;
   }, [snapshot.services]);
 
   const clearPendingLogEntries = useCallback(() => {
@@ -537,6 +570,43 @@ export default function App() {
   }, [activeProject?.id, addToast]);
 
   useEffect(() => {
+    topologyPollerRef.current?.stop();
+    topologyStoreRef.current = createTopologyStore({ mode: TOPOLOGY_SOURCE_MODE });
+    setTopologyGraph(topologyStoreRef.current.getSnapshot().graph);
+    setIsTopologyRefreshing(false);
+
+    if (!activeProject) {
+      topologyPollerRef.current = null;
+      return;
+    }
+
+    const poller = createTopologyPoller({
+      store: topologyStoreRef.current,
+      loader: topologyLoaderRef.current,
+      onSnapshot: (nextSnapshot) => {
+        startTransition(() => {
+          setTopologyGraph(nextSnapshot.graph);
+        });
+      },
+      onRefreshingChange: setIsTopologyRefreshing,
+    });
+
+    topologyPollerRef.current = poller;
+
+    return () => {
+      poller.stop();
+      if (topologyPollerRef.current === poller) {
+        topologyPollerRef.current = null;
+      }
+    };
+  }, [activeProject?.id]);
+
+  useEffect(() => {
+    if (!activeProject || !topology || !topologyPollerRef.current) return;
+    topologyPollerRef.current.setContext(snapshot.services, topology);
+  }, [activeProject?.id, snapshot.services, topology]);
+
+  useEffect(() => {
     if (snapshot.services.length === 0) {
       setFocusedServiceId(null);
       setLogSnapshot(null);
@@ -714,6 +784,12 @@ export default function App() {
 
   const handleConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target || connection.source === connection.target) return;
+    const sourceTopologyService = topologyGraph.servicesById[connection.source];
+    if (TOPOLOGY_SOURCE_MODE === "manifest" || (TOPOLOGY_SOURCE_MODE === "hybrid" && sourceTopologyService?.manifest)) {
+      addToast("info", "Manual edges are disabled for manifest-backed services in the current topology mode.");
+      return;
+    }
+
     updateTopology((current) => {
       const alreadyExists = current.edges.some(
         (edge) => edge.sourceServiceId === connection.source && edge.targetServiceId === connection.target,
@@ -734,13 +810,20 @@ export default function App() {
         updatedAt: new Date().toISOString(),
       };
     });
-  }, [updateTopology]);
+  }, [addToast, topologyGraph.servicesById, updateTopology]);
 
   const handleDeleteEdges = useCallback((edgeIds: string[]) => {
     if (edgeIds.length === 0) return;
-    setSelectedEdgeIds((current) => current.filter((edgeId) => !edgeIds.includes(edgeId)));
+    const deletableEdgeIds = new Set(
+      topologyGraph.edges
+        .filter((edge) => edge.deletable && edgeIds.includes(edge.id))
+        .map((edge) => edge.id),
+    );
+    if (deletableEdgeIds.size === 0) return;
+
+    setSelectedEdgeIds((current) => current.filter((edgeId) => !deletableEdgeIds.has(edgeId)));
     updateTopology((current) => {
-      const nextEdges = current.edges.filter((edge) => !edgeIds.includes(edge.id));
+      const nextEdges = current.edges.filter((edge) => !deletableEdgeIds.has(edge.id));
       if (nextEdges.length === current.edges.length) return current;
       return {
         ...current,
@@ -748,7 +831,12 @@ export default function App() {
         updatedAt: new Date().toISOString(),
       };
     });
-  }, [updateTopology]);
+  }, [topologyGraph.edges, updateTopology]);
+
+  const handleRefreshTopology = useCallback(async () => {
+    if (!topologyPollerRef.current || !activeProject || !topology) return;
+    await topologyPollerRef.current.refreshAll();
+  }, [activeProject, topology]);
 
   const handleRunService = useCallback(async (service: Microservice) => {
     addToast("info", `Starting ${service.name}...`);
@@ -803,10 +891,19 @@ export default function App() {
     setFlowNodes((current) => {
       const previousById = new Map(current.map((node) => [node.id, node]));
       const nextNodes = snapshot.services.map((service, index) => {
+        const topologyService = topologyGraph.servicesById[service.id] ?? null;
         const layout = nodeLayouts[service.id] ?? service.graph ?? buildDefaultLayout(index);
         const selected = service.id === focusedServiceId;
         const previous = previousById.get(service.id);
         const telemetry = buildPressureTelemetry(service);
+        const label = topologyService?.displayName ?? service.name;
+        const subtitle = topologyService?.manifest && topologyService.serviceName !== label
+          ? topologyService.serviceName
+          : null;
+        const topologySourceLabel = topologyService?.sourceOfTruth === "manifest"
+          ? `${topologyService.loadSource ?? "manifest"}`
+          : "legacy";
+        const isTopologyStale = Boolean(topologyService?.stale);
 
         if (
           previous
@@ -817,6 +914,10 @@ export default function App() {
           && previous.data.onRun === graphNodeActions.onRun
           && previous.data.onStop === graphNodeActions.onStop
           && previous.data.onRestart === graphNodeActions.onRestart
+          && previous.data.label === label
+          && previous.data.subtitle === subtitle
+          && previous.data.topologySourceLabel === topologySourceLabel
+          && previous.data.isTopologyStale === isTopologyStale
           && areServicesEqual(previous.data.service, service)
           && previous.data.telemetry.pressureScore === telemetry.pressureScore
           && previous.data.telemetry.pressureTone === telemetry.pressureTone
@@ -826,6 +927,7 @@ export default function App() {
 
         return buildGraphNode({
           service,
+          topologyService,
           layout,
           selected,
           previous,
@@ -840,12 +942,12 @@ export default function App() {
         ? current
         : nextNodes;
     });
-  }, [focusedServiceId, graphNodeActions, snapshot.services, topology?.nodeLayouts]);
+  }, [focusedServiceId, graphNodeActions, snapshot.services, topology?.nodeLayouts, topologyGraph.servicesById]);
 
   useEffect(() => {
-    const currentEdgeIds = new Set((topology?.edges ?? []).map((edge) => edge.id));
+    const currentEdgeIds = new Set(topologyGraph.edges.map((edge) => edge.id));
     setSelectedEdgeIds((current) => current.filter((edgeId) => currentEdgeIds.has(edgeId)));
-  }, [topology?.edges]);
+  }, [topologyGraph.edges]);
 
   useEffect(() => {
     if (
@@ -878,20 +980,19 @@ export default function App() {
   ]);
 
   const edges = useMemo<Array<Edge<ServiceFlowEdgeData>>>(() => (
-    (topology?.edges ?? [])
-      .filter((edge) => serviceNameById.has(edge.sourceServiceId) && serviceNameById.has(edge.targetServiceId))
+    topologyGraph.edges
       .map((edge) => ({
         id: edge.id,
         source: edge.sourceServiceId,
         target: edge.targetServiceId,
         type: "serviceEdge",
-        deletable: true,
+        deletable: edge.deletable,
         selected: selectedEdgeIds.includes(edge.id),
         data: {
           edge,
         },
       }))
-  ), [selectedEdgeIds, serviceNameById, topology?.edges]);
+  ), [selectedEdgeIds, topologyGraph.edges]);
 
   async function handleSubmitProject(event: FormEvent) {
     event.preventDefault();
@@ -1179,6 +1280,10 @@ export default function App() {
                 edges={edges}
                 isPendingAction={isPendingAction}
                 isRunAllPending={isRunAllPending}
+                isTopologyRefreshing={isTopologyRefreshing}
+                topologyMode={TOPOLOGY_SOURCE_MODE}
+                topologyManifestCount={topologyGraph.manifestServiceCount}
+                topologyLegacyCount={topologyGraph.legacyServiceCount}
                 onAddService={() => {
                   setEditingService(null);
                   setServiceForm(emptyServiceForm);
@@ -1186,8 +1291,18 @@ export default function App() {
                 }}
                 onRunAll={() => void handleRunAll()}
                 onStopAll={() => void handleStopAll()}
+                onRefreshTopology={() => void handleRefreshTopology()}
                 onNodesChange={handleNodesChange}
                 onConnect={handleConnect}
+                canConnect={(connection) => {
+                  if (!connection.source || !connection.target || connection.source === connection.target) {
+                    return false;
+                  }
+                  const sourceTopologyService = topologyGraph.servicesById[connection.source];
+                  if (TOPOLOGY_SOURCE_MODE === "manifest") return false;
+                  if (TOPOLOGY_SOURCE_MODE === "hybrid" && sourceTopologyService?.manifest) return false;
+                  return true;
+                }}
                 onEdgeSelect={(edgeId) => setSelectedEdgeIds([edgeId])}
                 onClearEdgeSelection={() => setSelectedEdgeIds([])}
                 onNodeSelect={(serviceId) => setFocusedServiceId(serviceId)}
@@ -1211,6 +1326,9 @@ export default function App() {
 
             <ServiceInspector
               service={focusedService}
+              topologyService={focusedTopologyService}
+              topologyMode={TOPOLOGY_SOURCE_MODE}
+              isTopologyRefreshing={isTopologyRefreshing}
               services={snapshot.services}
               tab={inspectorTab}
               onTabChange={setInspectorTab}
@@ -1218,6 +1336,7 @@ export default function App() {
                 setFocusedServiceId(serviceId);
                 if (inspectorTab === "logs") void loadLogsForService(serviceId);
               }}
+              onRefreshTopology={() => void handleRefreshTopology()}
               onRun={(service) => void handleRunService(service)}
               onStop={(service) => void handleStopService(service)}
               onRestart={(service) => void handleRestartService(service)}

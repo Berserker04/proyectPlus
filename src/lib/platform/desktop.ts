@@ -13,6 +13,11 @@ import type {
 
 export type { UnlistenFn } from "@tauri-apps/api/event";
 
+export interface TopologyEndpointResponse {
+  status: number;
+  body: string;
+}
+
 function isTauriRuntime() {
   return Boolean(window.__TAURI_INTERNALS__);
 }
@@ -69,6 +74,32 @@ export async function saveProjectTopology(topology: ProjectTopology): Promise<Pr
 export async function openDirectoryDialog(): Promise<string | null> {
   if (!isTauriRuntime()) return null;
   return invokeDesktop<string | null>("select_directory");
+}
+
+export async function readServiceTopologyManifest(serviceId: string): Promise<string | null> {
+  if (!isTauriRuntime()) return null;
+  return invokeDesktop<string | null>("read_service_topology_manifest", { serviceId });
+}
+
+export async function fetchServiceTopologyEndpoint(
+  url: string,
+  timeoutMs?: number,
+): Promise<TopologyEndpointResponse> {
+  if (!isTauriRuntime()) {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    return {
+      status: response.status,
+      body: await response.text(),
+    };
+  }
+
+  return invokeDesktop<TopologyEndpointResponse>("fetch_service_topology_endpoint", {
+    url,
+    timeoutMs,
+  });
 }
 
 // ---------------------------------------------------------------------------

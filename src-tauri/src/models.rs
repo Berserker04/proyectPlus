@@ -194,6 +194,13 @@ pub struct PortKillResponse {
     pub matched_service_ids: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopologyEndpointResponse {
+    pub status: u16,
+    pub body: String,
+}
+
 // ---------------------------------------------------------------------------
 // Event payloads
 // ---------------------------------------------------------------------------

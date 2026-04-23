@@ -1,6 +1,9 @@
 import { getBezierPath, type ConnectionLineComponentProps } from "@xyflow/react";
 import { getPointerEdgeGeometry, getFloatingEdgeGeometry } from "@/lib/ui/flowGeometry";
-import { getEdgeToneColor, type EdgeTone } from "@/lib/ui/serviceGraph";
+import {
+  getTopologyEdgeStyle,
+} from "@/topology/topology-edge-style";
+import type { TopologyEdgeVisualState } from "@/topology/types";
 
 export function ServiceConnectionLine(props: ConnectionLineComponentProps) {
   const geometry = props.toNode
@@ -14,12 +17,13 @@ export function ServiceConnectionLine(props: ConnectionLineComponentProps) {
   const sourcePosition = geometry?.sourcePosition ?? props.fromPosition;
   const targetPosition = geometry?.targetPosition ?? props.toPosition;
 
-  const tone: EdgeTone = props.connectionStatus === "invalid"
-    ? "critical"
+  const state: TopologyEdgeVisualState = props.connectionStatus === "invalid"
+    ? "error"
     : props.toNode
-      ? "healthy"
-      : "idle";
-  const strokeColor = getEdgeToneColor(tone);
+      ? "active"
+      : "declared";
+  const style = getTopologyEdgeStyle(state);
+  const strokeColor = style.stroke;
   const markerId = `service-connection-arrow-${props.fromNode.id}-${props.toNode?.id ?? "pointer"}`;
 
   const [path] = getBezierPath({
@@ -57,13 +61,13 @@ export function ServiceConnectionLine(props: ConnectionLineComponentProps) {
         strokeWidth={7}
       />
       <path
-        className={`service-connection-line service-connection-line-${tone}`}
+        className={`service-connection-line ${style.className}`}
         d={path}
         fill="none"
         stroke={strokeColor}
         strokeWidth={2.5}
         strokeLinecap="round"
-        strokeDasharray="10 8"
+        strokeDasharray={style.dasharray ?? undefined}
         markerEnd={`url(#${markerId})`}
       />
       <circle cx={sourceX} cy={sourceY} r={4.5} fill={strokeColor} fillOpacity={0.88} />

@@ -16,6 +16,7 @@ import type { Microservice, Project } from "@/lib/domain/models";
 import { ServiceFlowEdge, type ServiceFlowEdgeData } from "./ServiceFlowEdge";
 import { ServiceConnectionLine } from "./ServiceConnectionLine";
 import { ServiceGraphNode, type ServiceGraphNodeData } from "./ServiceGraphNode";
+import type { TopologySourceMode } from "@/topology/types";
 
 interface ServiceGraphViewProps {
   activeProject: Project | null;
@@ -24,11 +25,17 @@ interface ServiceGraphViewProps {
   edges: Array<Edge<ServiceFlowEdgeData>>;
   isPendingAction: boolean;
   isRunAllPending: boolean;
+  isTopologyRefreshing: boolean;
+  topologyMode: TopologySourceMode;
+  topologyManifestCount: number;
+  topologyLegacyCount: number;
   onAddService: () => void;
   onRunAll: () => void;
   onStopAll: () => void;
+  onRefreshTopology: () => void;
   onNodesChange: (changes: NodeChange<Node<ServiceGraphNodeData>>[]) => void;
   onConnect: (connection: Connection) => void;
+  canConnect: (connection: Connection) => boolean;
   onEdgeSelect: (edgeId: string) => void;
   onClearEdgeSelection: () => void;
   onNodeSelect: (serviceId: string) => void;
@@ -49,7 +56,8 @@ function ServiceGraphViewInner(props: ServiceGraphViewProps) {
     connection.source
     && connection.target
     && connection.source !== connection.target
-    && !props.edges.some((edge) => edge.source === connection.source && edge.target === connection.target),
+    && !props.edges.some((edge) => edge.source === connection.source && edge.target === connection.target)
+    && props.canConnect(connection),
   );
 
   return (
@@ -69,6 +77,9 @@ function ServiceGraphViewInner(props: ServiceGraphViewProps) {
               </button>
               <button className="btn-outline" onClick={props.onStopAll} disabled={props.isPendingAction}>
                 Stop all
+              </button>
+              <button className="btn-outline" onClick={props.onRefreshTopology} disabled={props.isTopologyRefreshing}>
+                {props.isTopologyRefreshing ? "Refreshing topology..." : "Refresh topology"}
               </button>
             </div>
           )}
@@ -140,8 +151,10 @@ function ServiceGraphViewInner(props: ServiceGraphViewProps) {
             />
             <Controls className="service-flow-controls" />
             <Panel position="top-left" className="service-flow-panel">
-              <span>Manual edges</span>
+              <span>{props.topologyMode} topology</span>
               <strong>{props.edges.length}</strong>
+              <span>{props.topologyManifestCount} manifest</span>
+              <span>{props.topologyLegacyCount} legacy</span>
             </Panel>
           </ReactFlow>
         ) : (
